@@ -9,12 +9,13 @@ import { reparentBone, newClip } from '../core/skeleton';
 import { resizeTexture } from '../core/paint';
 import { boneColor } from '../view/builders';
 import { openImageImport, openTextureResize } from './dialogs';
+import { withHelp } from './longpress';
 
 /** 操作ボタン（ショートカットがあれば併記） */
 function act(id: string, label?: string, cls = ''): HTMLButtonElement {
   const a = actions.get(id);
   const b = bindingsFor(id).find((x) => !x.mode || x.mode === state.mode);
-  const el = button(label ?? a?.label ?? id, () => runAction(id), { title: `${a?.label ?? id}${b ? `（${prettyCombo(b.combo)}）` : ''}`, cls });
+  const el = withHelp(button(label ?? a?.label ?? id, () => runAction(id), { title: `${a?.label ?? id}${b ? `（${prettyCombo(b.combo)}）` : ''}`, cls }), `action:${id}`);
   if (b) el.append(h('kbd', {}, prettyCombo(b.combo)));
   return el;
 }
@@ -45,7 +46,7 @@ function selModeRow(): HTMLElement {
 
 function selOpRow(): HTMLElement {
   const set = (v: typeof state.selOp) => () => ((state.selOp = v), notify('ui'));
-  return row(
+  return withHelp(row(
     h('span', { class: 'lbl' }, 'タップで'),
     h(
       'div',
@@ -54,15 +55,15 @@ function selOpRow(): HTMLElement {
       button('追加', set('add'), { active: state.selOp === 'add' }),
       button('解除', set('sub'), { active: state.selOp === 'sub' }),
     ),
-  );
+  ), 'panel:selop');
 }
 
 function axisRow(): HTMLElement {
-  return row(
+  return withHelp(row(
     h('span', { class: 'lbl', title: 'TourBox のダイヤルや ＋/− キーで動く軸' }, '微調整の軸'),
     h('div', { class: 'seg' }, ...(['X', 'Y', 'Z'] as const).map((n, i) => button(n, () => ((state.axis = i as 0 | 1 | 2), notify('ui', 'view')), { active: state.axis === i, cls: `axis${i}` }))),
     h('div', { class: 'seg' }, act('nudge-minus', '−'), act('nudge-plus', '＋')),
-  );
+  ), 'panel:axis');
 }
 
 function paletteSection(): HTMLElement {
@@ -70,20 +71,40 @@ function paletteSection(): HTMLElement {
   const sw = h(
     'div',
     { class: 'palette' },
-    ...pal.map((c, i) =>
-      h('button', {
+    ...pal.map((c, i) => {
+      const replace = () => {
+        checkpoint();
+        pal[i] = state.color;
+        notify('ui');
+      };
+      const b = h('button', {
         class: `swatch ${c.toLowerCase() === state.color.toLowerCase() ? 'active' : ''}`,
         style: `background:${c}`,
         title: c,
-        onclick: () => ((state.color = c), notify('ui')),
         oncontextmenu: (e: Event) => {
           e.preventDefault();
-          checkpoint();
-          pal[i] = state.color;
-          notify('ui');
+          replace();
         },
-      }),
-    ),
+      });
+      // iPad の Safari では長押しで contextmenu が来ないので、自前で長押しを判定する
+      let timer = 0;
+      let long = false;
+      b.addEventListener('pointerdown', () => {
+        long = false;
+        timer = window.setTimeout(() => {
+          long = true;
+          replace();
+        }, 500);
+      });
+      for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => clearTimeout(timer));
+      b.addEventListener('click', () => {
+        if (!long) {
+          state.color = c;
+          notify('ui');
+        }
+      });
+      return b;
+    }),
   );
   const picker = h('input', { type: 'color', value: state.color, class: 'colorpick' });
   picker.addEventListener('input', () => {
@@ -100,7 +121,7 @@ function paletteSection(): HTMLElement {
       }
     })),
     sw,
-    h('p', { class: 'hint' }, '長押し（右クリック）で、そのマスを今の色に置き換え'),
+    h('p', { class: 'hint' }, 'マスを長押しすると、そのマスを今の色に置き換えます'),
   );
 }
 
@@ -137,11 +158,11 @@ function modelPanel(root: HTMLElement): void {
       '変形',
       axisRow(),
       row(
-        checkbox('グリッド吸着', state.snap, (v) => ((state.snap = v), notify('ui'))),
+        withHelp(checkbox('グリッド吸着', state.snap, (v) => ((state.snap = v), notify('ui'))), 'panel:snap'),
         h('span', { class: 'lbl' }, '刻み'),
         numberInput(state.gridStep, (v) => ((state.gridStep = Math.max(0.001, v)), notify('ui')), { step: 0.01, min: 0.001, width: '5em' }),
       ),
-      row(checkbox('X対称に編集', state.symmetryX, (v) => ((state.symmetryX = v), notify('ui')), '左右対称のモデルを片側だけ動かす')),
+      row(withHelp(checkbox('X対称に編集', state.symmetryX, (v) => ((state.symmetryX = v), notify('ui')), '左右対称のモデルを片側だけ動かす'), 'panel:symmetry')),
       grid(act('snap-grid', '頂点をグリッドへ')),
     ),
     paletteSection(),

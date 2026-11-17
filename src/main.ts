@@ -4,10 +4,12 @@ import { installKeyHandler } from './input/keymap';
 import { openLatestFromLibrary } from './ui/dialogs';
 import { requestPersistence } from './io/project';
 import { ctx } from './actions';
+import { installLongPressHelp } from './ui/longpress';
 
 async function start(): Promise<void> {
   const root = document.getElementById('app')!;
   installKeyHandler();
+  installLongPressHelp();
   // 前回の作業があれば開く（なければサンプル人型）
   const restored = await openLatestFromLibrary();
   buildApp(root);

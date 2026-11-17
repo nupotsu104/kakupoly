@@ -16,7 +16,7 @@ export class Timeline {
   constructor() {
     this.canvas = h('canvas', { class: 'tl-canvas' });
     this.canvas.style.touchAction = 'none';
-    this.label = h('span', { class: 'tl-label' });
+    this.label = h('span', { class: 'tl-label', 'data-help': 'timeline' });
     this.playBtn = button('▶', () => runAction('play'), { cls: 'tl-play', title: '再生／停止' });
     this.el = h(
       'div',

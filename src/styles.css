@@ -720,3 +720,43 @@ textarea {
     display: none;
   }
 }
+
+/* ---------- 長押しの説明 ---------- */
+.helppop {
+  position: fixed;
+  z-index: 300;
+  max-width: 320px;
+  background: #fffdf6;
+  color: #1c1d26;
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
+  font-size: 13.5px;
+  line-height: 1.55;
+  pointer-events: auto;
+}
+.helppop b {
+  display: block;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+.helppop p {
+  margin: 4px 0;
+}
+.helppop small {
+  display: block;
+  margin-top: 8px;
+  color: #777;
+  font-size: 11px;
+}
+.helppop kbd {
+  font: 11px ui-monospace, monospace;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  padding: 0 5px;
+  margin-right: 4px;
+  background: #f1f1f1;
+}
+[data-help] {
+  -webkit-touch-callout: none;
+}

@@ -8,6 +8,7 @@ import { Controls } from '../view/controls';
 import { TextureEditor } from './texture-editor';
 import { Timeline } from './timeline';
 import { renderPanel } from './panels';
+import { withHelp } from './longpress';
 import { openFileMenu, openSettings, openHelp, saveToLibrary, isDirty } from './dialogs';
 import { docStats } from '../core/doc';
 import { selVerts } from '../core/mesh-ops';
@@ -34,23 +35,23 @@ const TOOL_ICON: Record<string, string> = {
 export function buildApp(root: HTMLElement): void {
   // ---- 上部バー ----
   const modeTabs = h('div', { class: 'modes' });
-  const undoBtn = button('↶', () => runAction('undo'), { title: '取り消し（指2本タップでも）', cls: 'icon' });
-  const redoBtn = button('↷', () => runAction('redo'), { title: 'やり直し（指3本タップでも）', cls: 'icon' });
+  const undoBtn = withHelp(button('↶', () => runAction('undo'), { title: '取り消し（指2本タップでも）', cls: 'icon' }), 'top:undo');
+  const redoBtn = withHelp(button('↷', () => runAction('redo'), { title: 'やり直し（指3本タップでも）', cls: 'icon' }), 'top:redo');
   const viewMenu = h('div', { class: 'popover' });
-  const viewBtn = button('表示 ▾', () => viewMenu.classList.toggle('open'));
+  const viewBtn = withHelp(button('表示 ▾', () => viewMenu.classList.toggle('open')), 'top:view');
   const docName = h('span', { class: 'docname' });
   const top = h(
     'header',
     { class: 'topbar' },
-    button('ファイル', () => openFileMenu(() => thumbnail()), { cls: 'menu' }),
+    withHelp(button('ファイル', () => openFileMenu(() => thumbnail()), { cls: 'menu' }), 'top:file'),
     docName,
     modeTabs,
     h('div', { class: 'spacer' }),
     undoBtn,
     redoBtn,
     h('div', { class: 'popwrap' }, viewBtn, viewMenu),
-    button('⌨', () => openSettings(), { title: 'キー割り当て・TourBox・Apple Pencil', cls: 'icon' }),
-    button('?', () => openHelp(), { title: '使い方', cls: 'icon' }),
+    withHelp(button('⌨', () => openSettings(), { title: 'キー割り当て・TourBox・Apple Pencil', cls: 'icon' }), 'top:keys'),
+    withHelp(button('?', () => openHelp(), { title: '使い方', cls: 'icon' }), 'top:help'),
   );
 
   // ---- 本体 ----
@@ -70,8 +71,8 @@ export function buildApp(root: HTMLElement): void {
   const tex = new TextureEditor(texEl);
 
   // 視点操作ボタン（ペンでドラッグ）
-  const navBtn = (label: string, title: string, fn: (dx: number, dy: number) => void) => {
-    const b = h('button', { class: 'navbtn', title }, label);
+  const navBtn = (label: string, title: string, help: string, fn: (dx: number, dy: number) => void) => {
+    const b = withHelp(h('button', { class: 'navbtn', title }, label), help);
     b.style.touchAction = 'none';
     let last: [number, number] | null = null;
     b.addEventListener('pointerdown', (e) => {
@@ -91,11 +92,11 @@ export function buildApp(root: HTMLElement): void {
     h(
       'div',
       { class: 'navpad' },
-      navBtn('⟲', 'ドラッグで視点回転', (dx, dy) => vp.orbit(dx * 1.5, dy * 1.5)),
-      navBtn('✥', 'ドラッグで視点移動', (dx, dy) => vp.pan(dx, dy)),
-      navBtn('⊕', 'ドラッグでズーム', (_dx, dy) => vp.zoom(Math.exp(dy * 0.01))),
-      button('⛶', () => runAction('view-frame'), { cls: 'navbtn', title: '全体を表示' }),
-      button('▣', () => runAction('view-frame-sel'), { cls: 'navbtn', title: '選択部分を表示' }),
+      navBtn('⟲', 'ドラッグで視点回転', 'nav:orbit', (dx, dy) => vp.orbit(dx * 1.5, dy * 1.5)),
+      navBtn('✥', 'ドラッグで視点移動', 'nav:pan', (dx, dy) => vp.pan(dx, dy)),
+      navBtn('⊕', 'ドラッグでズーム', 'nav:zoom', (_dx, dy) => vp.zoom(Math.exp(dy * 0.01))),
+      withHelp(button('⛶', () => runAction('view-frame'), { cls: 'navbtn', title: '全体を表示' }), 'nav:frame'),
+      withHelp(button('▣', () => runAction('view-frame-sel'), { cls: 'navbtn', title: '選択部分を表示' }), 'nav:frame-sel'),
     ),
   );
   const heldBadge = h('div', { class: 'heldbadge' });
@@ -161,7 +162,7 @@ export function buildApp(root: HTMLElement): void {
       // モードタブ
       clear(modeTabs);
       (Object.keys(MODE_LABEL) as Mode[]).forEach((m, i) =>
-        modeTabs.append(button(MODE_LABEL[m], () => setMode(m), { active: state.mode === m, title: `Shift+${i + 1}` })),
+        modeTabs.append(withHelp(button(MODE_LABEL[m], () => setMode(m), { active: state.mode === m, title: `Shift+${i + 1}` }), `mode:${m}`)),
       );
       undoBtn.disabled = !canUndo();
       redoBtn.disabled = !canRedo();
@@ -169,7 +170,7 @@ export function buildApp(root: HTMLElement): void {
       // ツール列
       clear(rail);
       for (const [id, label, desc] of TOOLS[state.mode]) {
-        const b = button('', () => setTool(id), { active: state.tool[state.mode] === id, title: `${label}: ${desc}`, cls: 'tool' });
+        const b = withHelp(button('', () => setTool(id), { active: state.tool[state.mode] === id, title: `${label}: ${desc}`, cls: 'tool' }), `tool:${state.mode}:${id}`);
         b.append(h('span', { class: 'ti' }, TOOL_ICON[id] ?? '•'), h('span', { class: 'tl' }, label));
         const kb = bindingsFor(`tool-${state.mode}-${id}`)[0];
         if (kb) b.title += `（${prettyCombo(kb.combo)}）`;
@@ -177,7 +178,7 @@ export function buildApp(root: HTMLElement): void {
       }
       rail.append(h('div', { class: 'rail-sep' }));
       if (state.mode === 'texture' || state.mode === 'model') {
-        const sw = h('button', { class: 'tool colorchip', title: '現在の色', style: `--c:${state.color}` }, h('span', { class: 'ti' }, '■'), h('span', { class: 'tl' }, '色'));
+        const sw = h('button', { class: 'tool colorchip', title: '現在の色', style: `--c:${state.color}`, 'data-help': 'rail:color' }, h('span', { class: 'ti' }, '■'), h('span', { class: 'tl' }, '色'));
         rail.append(sw);
       }
       // テクスチャモードは画面を左右に分ける
@@ -198,7 +199,7 @@ export function buildApp(root: HTMLElement): void {
       const o = activeObject();
       const tool = TOOLS[state.mode].find((t) => t[0] === state.tool[state.mode]);
       const flags = [state.snap ? '吸着' : '', state.symmetryX ? 'X対称' : '', `軸:${'XYZ'[state.axis]}`].filter(Boolean).join(' ');
-      status.textContent = `${tool ? `${tool[1]} — ${tool[2]}` : ''}　|　${o ? `${o.name} 選択 ${selVerts(o, state.sel).size}頂点` : ''}　|　全体 ${s.verts}頂点 ${s.tris}三角形　|　${flags}${pencilSettings.fingerEdit ? '　|　指で編集' : ''}`;
+      status.textContent = `ボタンは長押しで説明　|　${tool ? `${tool[1]} — ${tool[2]}` : ''}　|　${o ? `${o.name} 選択 ${selVerts(o, state.sel).size}頂点` : ''}　|　全体 ${s.verts}頂点 ${s.tris}三角形　|　${flags}${pencilSettings.fingerEdit ? '　|　指で編集' : ''}`;
     });
   };
   subscribe((ch) => {
