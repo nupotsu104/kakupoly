@@ -42,7 +42,14 @@ export async function importFiles(files: File[], opts: ImportOptions = DEFAULT_I
     let clips: THREE.AnimationClip[] = [];
     if (ext === 'glb' || ext === 'gltf') {
       const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
+      const { DRACOLoader } = await import('three/addons/loaders/DRACOLoader.js');
+      const { MeshoptDecoder } = await import('three/addons/libs/meshopt_decoder.module.js');
       const loader = new GLTFLoader(manager);
+      // 圧縮された glTF（Draco・meshopt）にも対応。Draco の復号器は public/draco/ に置いてある
+      const draco = new DRACOLoader();
+      draco.setDecoderPath(new URL('./draco/', document.baseURI).href);
+      loader.setDRACOLoader(draco);
+      loader.setMeshoptDecoder(MeshoptDecoder);
       const data = ext === 'glb' ? await main.arrayBuffer() : await main.text();
       const g = await loader.parseAsync(data, '');
       restoreGltfNames(g);

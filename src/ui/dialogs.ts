@@ -7,6 +7,7 @@ import { quantize, resizeBox, resizeNearest, to15bit, usedColors, type Img } fro
 import { newDoc, newTexture } from '../core/doc';
 import { resizeTexture } from '../core/paint';
 import { loadImageFile, importFiles, DEFAULT_IMPORT, type ImportOptions } from '../io/import';
+import { inspectModelFile } from '../io/inspect';
 import { exportGLB, exportOBJ } from '../io/gltf-export';
 import { encodePNG } from '../io/png';
 import { serialize, deserialize, storage, requestPersistence } from '../io/project';
@@ -265,6 +266,39 @@ export function openFileMenu(snapshot: () => string): void {
   refresh();
 }
 
+/** 読み込めなかった理由を、消えない画面で詳しく出す（そのまま送ってもらえば原因が分かるように） */
+async function showImportError(files: File[], e: unknown): Promise<void> {
+  const err = e as Error;
+  const lines = [`エラー: ${err?.message ?? String(e)}`];
+  if (err?.stack) lines.push(...err.stack.split('\n').slice(0, 3).map((l) => `  ${l.trim()}`));
+  for (const f of files) {
+    lines.push('');
+    lines.push(...(await inspectModelFile(f)));
+  }
+  lines.push('', `端末: ${navigator.userAgent}`);
+  const text = lines.join('\n');
+  const pre = h('pre', { class: 'errreport' }, text);
+  const body = h(
+    'div',
+    {},
+    h('p', {}, '読み込めませんでした。下の内容をそのまま（スクリーンショットか「コピー」で）送ってもらえれば、原因を調べられます。'),
+    pre,
+    h(
+      'div',
+      { class: 'actions' },
+      button('コピー', async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          toast('コピーしました');
+        } catch {
+          toast('コピーできませんでした。スクリーンショットを撮ってください');
+        }
+      }),
+    ),
+  );
+  modal('読み込めませんでした', body, { wide: true });
+}
+
 async function openKpoly(close: () => void): Promise<void> {
   const [f] = await pickFile('.kpoly,application/json');
   if (!f) return;
@@ -327,7 +361,8 @@ async function doImport(append: boolean, close: () => void): Promise<void> {
     if (tris > 3000) setTimeout(() => toast('ポリゴンがPS1の1キャラとしては多めです（当時は数百〜千数百程度が目安）', 5000), 4200);
   } catch (e) {
     console.error(e);
-    toast(`読み込めませんでした: ${(e as Error).message}`, 5000);
+    document.getElementById('toast')?.classList.remove('show');
+    await showImportError(files, e);
   }
 }
 
