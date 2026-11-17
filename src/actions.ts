@@ -357,7 +357,11 @@ for (const [k, label] of [
     const v = ctx.vp;
     const center: V3 = v ? [...v.cam.target] : [0, 0.5, 0];
     if (state.snap) for (let i = 0; i < 3; i++) center[i] = Math.round(center[i] / state.gridStep) * state.gridStep;
+    // 左右対称モードでは体の中心（X=0）に置く。視点の中心がずれていても左右対称に編集できるように
+    const moved = state.symmetryX && Math.abs(center[0]) > 1e-6;
+    if (state.symmetryX) center[0] = 0;
     ops.addPrimitive(o, state.sel, k, { size: 0.5, sides: k === 'sphere' ? 8 : 6, center, color: [1, 1, 1] });
+    if (moved) toast('左右対称モードなので、中心（X=0）に追加しました');
     notify('doc', 'sel', 'ui');
   });
 

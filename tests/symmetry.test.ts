@@ -116,4 +116,13 @@ describe('左右対称モード', () => {
     o.verts.forEach((p) => (p[0] += p[0] > 0 ? 0.01 : 0)); // 0.01cm のずれ
     expect(diagnoseSymmetry(doc, 0).same).toBe(1);
   });
+
+  it('中心に置いた立方体・円柱・円すい・球は、それぞれ左右対称', () => {
+    for (const k of ['cube', 'cylinder', 'cone', 'sphere'] as const) {
+      const doc = newDoc();
+      const o = newMesh(doc, k);
+      ops.addPrimitive(o, emptySelection(), k, { size: 0.5, sides: k === 'sphere' ? 8 : 6, center: [0, 1, 0.3] });
+      expect(diagnoseSymmetry(doc, 0).same, k).toBe(1);
+    }
+  });
 });
