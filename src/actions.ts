@@ -6,7 +6,8 @@ import { autoWeightsRigid, deleteBone, addBone, setKey, deleteKey, newClip, assi
 import { mirrorBoneName } from './core/mesh-ops';
 import { nudge } from './view/transform';
 import { mPos } from './core/vec';
-import { mirrorBone, SYM_EPS } from './core/symmetry';
+import { mirrorBone, SYM_EPS, diagnoseSymmetry, centerX } from './core/symmetry';
+import { joinObjects } from './core/mesh-ops';
 import type { V3 } from './core/types';
 import { toast } from './ui/dom';
 import type { Viewport } from './view/viewport';
@@ -150,8 +151,49 @@ def('snap-toggle', '変形', 'グリッド吸着 切替', () => {
 });
 def('symmetry-toggle', '変形', '左右対称モード 切替', () => {
   state.symmetryX = !state.symmetryX;
+  symWarned.clear();
   toast(`左右対称モード: ${state.symmetryX ? 'オン' : 'オフ'}`);
+  if (state.symmetryX && state.mode !== 'anim') setTimeout(() => warnSymmetry(true), 1200);
   notify('ui', 'view');
+});
+
+const symWarned = new Set<number>();
+/** 左右対称が効かないモデルなら理由を知らせる（オブジェクトごとに1回） */
+export function warnSymmetry(force = false): void {
+  const o = activeObject();
+  if (!o || !state.symmetryX || (!force && symWarned.has(o.id))) return;
+  symWarned.add(o.id);
+  const d = diagnoseSymmetry(state.doc, state.activeObj);
+  if (d.message) toast(d.message, 7000);
+}
+
+def('join-all', 'モデリング', '全部を1つのオブジェクトに結合', () => {
+  const objs = state.doc.objects;
+  if (objs.length < 2) return toast('オブジェクトは1つだけです');
+  const texs = new Set(objs.map((o) => o.tex));
+  if (texs.size > 1 && !confirm('違うテクスチャを使うオブジェクトがあります。結合すると1つ目のテクスチャに統一されます。続けますか？')) return;
+  checkpoint();
+  const [first, ...rest] = objs;
+  for (const o of rest) joinObjects(first, o);
+  state.doc.objects = [first];
+  state.activeObj = 0;
+  state.sel.verts.clear();
+  state.sel.edges.clear();
+  state.sel.faces.clear();
+  symWarned.clear();
+  toast(`${rest.length + 1}個を1つにまとめました`);
+  notify('doc', 'ui', 'sel');
+});
+def('center-x', 'モデリング', '全体を中心（X=0）に移動', () => {
+  checkpoint();
+  const dx = centerX(state.doc);
+  if (Math.abs(dx) < 1e-9) {
+    dropCheckpoint();
+    return toast('すでに中心にあります');
+  }
+  symWarned.clear();
+  toast('中心に移動しました');
+  notify('doc', 'ui', 'pose');
 });
 
 // ---------------- 視点 ----------------

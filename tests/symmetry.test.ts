@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { newDoc, newMesh, emptySelection } from '../src/core/doc';
 import * as ops from '../src/core/mesh-ops';
-import { mirrorSelection, symmetricMover, symmetryMap, mirrorBone, pairBoneBase } from '../src/core/symmetry';
+import { mirrorSelection, symmetricMover, symmetryMap, mirrorBone, pairBoneBase, diagnoseSymmetry, centerX } from '../src/core/symmetry';
 import { addBone } from '../src/core/skeleton';
 import type { MeshObj } from '../src/core/types';
 
@@ -82,5 +82,38 @@ describe('左右対称モード', () => {
     expect(mirrorBone(doc, a)).toBe(b);
     expect(mirrorBone(doc, b)).toBe(a);
     expect(pairBoneBase(doc)).toBe('bone.01');
+  });
+
+  it('左右の腕が別オブジェクトでも、動かすと反対側が追従する（AI製モデルの形）', () => {
+    const doc = newDoc();
+    const r = newMesh(doc, 'armR');
+    const l = newMesh(doc, 'armL');
+    ops.addPrimitive(r, emptySelection(), 'cube', { size: 0.2, center: [0.5, 1, 0] });
+    ops.addPrimitive(l, emptySelection(), 'cube', { size: 0.2, center: [-0.5, 1, 0] });
+    const d = diagnoseSymmetry(doc, 0);
+    expect(d.same).toBe(0);
+    expect(d.any).toBe(1);
+    expect(d.message).toContain('別々のオブジェクト');
+    symmetricMover(r, r.verts.map((_, i) => i), [l])((p) => [p[0] + 0.3, p[1] - 0.2, p[2]]);
+    const lx = Math.min(...l.verts.map((p) => p[0]));
+    expect(lx).toBeCloseTo(-0.9);
+    expect(Math.max(...l.verts.map((p) => p[1]))).toBeCloseTo(0.9);
+  });
+
+  it('中心からずれたモデルは理由を返し、中心に移動すると効く', () => {
+    const doc = newDoc();
+    const o = newMesh(doc, 'body');
+    ops.addPrimitive(o, emptySelection(), 'cube', { size: 1, center: [3, 0, 0] });
+    expect(diagnoseSymmetry(doc, 0).message).toContain('ずれて');
+    expect(centerX(doc)).toBeCloseTo(-3);
+    expect(diagnoseSymmetry(doc, 0).message).toBeNull();
+  });
+
+  it('cm単位の大きなモデルでも、わずかな誤差なら対になる', () => {
+    const doc = newDoc();
+    const o = newMesh(doc, 'big');
+    ops.addPrimitive(o, emptySelection(), 'cube', { size: 180 });
+    o.verts.forEach((p) => (p[0] += p[0] > 0 ? 0.01 : 0)); // 0.01cm のずれ
+    expect(diagnoseSymmetry(doc, 0).same).toBe(1);
   });
 });

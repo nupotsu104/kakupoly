@@ -6,7 +6,7 @@
 import type { V2, V3 } from '../core/types';
 import { parseEdge } from '../core/types';
 import { state, notify, checkpoint, dropCheckpoint, activeObject, currentPose } from '../state';
-import { ctx as actx, runAction } from '../actions';
+import { ctx as actx, runAction, warnSymmetry } from '../actions';
 import { pencilSettings } from '../input/keymap';
 import * as ops from '../core/mesh-ops';
 import { hexToRgb } from '../core/doc';
@@ -349,6 +349,7 @@ export class Controls {
       if (op === 'set') set.clear();
       if (item === null) return;
       const m = mirrorOf(item) as T | undefined;
+      if (sym && m === undefined) warnSymmetry();
       const items = m !== undefined && m !== item ? [item, m] : [item];
       const removing = op === 'sub' || (op === 'add' && set.has(item));
       for (const it of items) removing ? set.delete(it) : set.add(it);

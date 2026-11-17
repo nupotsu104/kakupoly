@@ -66,7 +66,7 @@ function meshSession(info: { pivot: V3; axes: Axes; can: Session['can'] }): Sess
   const o = activeObject()!;
   const vs = [...selVerts(o, state.sel)];
   const orig = new Map<number, V3>(vs.map((v) => [v, [...o.verts[v]] as V3]));
-  const mover = state.symmetryX ? symmetricMover(o, vs) : null;
+  const mover = state.symmetryX ? symmetricMover(o, vs, state.doc.objects.filter((x) => x.visible && x !== o)) : null;
   const apply = (fn: (p: V3) => V3) => {
     if (mover) mover(fn);
     else for (const v of vs) o.verts[v] = fn(orig.get(v)!);

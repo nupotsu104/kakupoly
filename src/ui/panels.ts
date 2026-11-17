@@ -486,6 +486,8 @@ function objectsSection(): HTMLElement {
         o.doubleSided = !o.doubleSided;
         notify('doc', 'ui');
       }),
+      act('join-all', '全部を1つに結合'),
+      act('center-x', '中心に移動'),
       button('下と結合', () => {
         const i = state.activeObj;
         const a = objs[i],
