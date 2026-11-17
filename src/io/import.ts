@@ -1,6 +1,13 @@
 // 外部ファイルの読み込み（glTF/GLB・OBJ(+MTL)・FBX）→ 編集用ドキュメントへ変換。
 // 三角形の集まりで来ることが多いので、重なった頂点の溶接と「三角形→四角形」の整理も行う。
 import * as THREE from 'three';
+// 読み込み用の部品は本体に含める（後から別ファイルを取りに行くと、アプリ更新の前後で見つからず失敗するため）
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
 import type { Doc, Face, MeshObj, V2, V3, Bone, Influence, Texture } from '../core/types';
 import { newDoc } from '../core/doc';
 import { weldByDistance } from '../core/mesh-ops';
@@ -41,9 +48,6 @@ export async function importFiles(files: File[], opts: ImportOptions = DEFAULT_I
     let root: THREE.Object3D;
     let clips: THREE.AnimationClip[] = [];
     if (ext === 'glb' || ext === 'gltf') {
-      const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
-      const { DRACOLoader } = await import('three/addons/loaders/DRACOLoader.js');
-      const { MeshoptDecoder } = await import('three/addons/libs/meshopt_decoder.module.js');
       const loader = new GLTFLoader(manager);
       // 圧縮された glTF（Draco・meshopt）にも対応。Draco の復号器は public/draco/ に置いてある
       const draco = new DRACOLoader();
@@ -56,16 +60,13 @@ export async function importFiles(files: File[], opts: ImportOptions = DEFAULT_I
       root = g.scene;
       clips = g.animations;
     } else if (ext === 'fbx') {
-      const { FBXLoader } = await import('three/addons/loaders/FBXLoader.js');
       const loader = new FBXLoader(manager);
       root = loader.parse(await main.arrayBuffer(), '');
       clips = (root as THREE.Object3D & { animations: THREE.AnimationClip[] }).animations ?? [];
     } else {
-      const { OBJLoader } = await import('three/addons/loaders/OBJLoader.js');
       const loader = new OBJLoader(manager);
       const mtlFile = files.find((f) => /\.mtl$/i.test(f.name));
       if (mtlFile) {
-        const { MTLLoader } = await import('three/addons/loaders/MTLLoader.js');
         const mtl = new MTLLoader(manager).parse(await mtlFile.text(), '');
         mtl.preload();
         loader.setMaterials(mtl);

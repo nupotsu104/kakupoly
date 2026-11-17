@@ -5,6 +5,7 @@ import { openLatestFromLibrary } from './ui/dialogs';
 import { requestPersistence } from './io/project';
 import { ctx } from './actions';
 import { installLongPressHelp } from './ui/longpress';
+import { installUpdateChecks, APP_VERSION } from './update';
 
 async function start(): Promise<void> {
   const root = document.getElementById('app')!;
@@ -15,6 +16,8 @@ async function start(): Promise<void> {
   buildApp(root);
   if (restored) requestAnimationFrame(() => ctx.vp?.frame());
   requestPersistence();
+  installUpdateChecks();
+  console.info('KakuPoly', APP_VERSION);
   // オフラインでも起動できるように（https かつ ネイティブ包みでない時）
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
