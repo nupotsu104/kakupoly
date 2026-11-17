@@ -78,7 +78,8 @@ export async function importFiles(files: File[], opts: ImportOptions = DEFAULT_I
     }
     // テクスチャ画像の読み込み完了を待つ
     await waitForTextures(root);
-    const doc = await sceneToDoc(root, clips, opts);
+    // FBX・OBJ の UV は「下が 0・上が 1」。KakuPoly（と glTF）は「上が 0」なので、テクスチャの有無に関係なく上下を直す
+    const doc = await sceneToDoc(root, clips, opts, ext !== 'glb' && ext !== 'gltf');
     doc.name = main.name.replace(/\.[^.]+$/, '');
     if (opts.targetTris > 0) await simplifyDoc(doc, opts.targetTris);
     return doc;
@@ -137,7 +138,7 @@ export function restoreGltfNames(g: { scene: THREE.Object3D; parser: { json: { n
 
 const nameOf = (o: THREE.Object3D): string => (o.userData.originalName as string | undefined) ?? o.name;
 
-export async function sceneToDoc(root: THREE.Object3D, clips: THREE.AnimationClip[], opts: ImportOptions): Promise<Doc> {
+export async function sceneToDoc(root: THREE.Object3D, clips: THREE.AnimationClip[], opts: ImportOptions, flipV = false): Promise<Doc> {
   const doc = newDoc();
   root.updateMatrixWorld(true);
 
@@ -271,7 +272,7 @@ export async function sceneToDoc(root: THREE.Object3D, clips: THREE.AnimationCli
         if (flip) ids.reverse();
         const f: Face = {
           v: ids.map(vid),
-          uv: ids.map((i): V2 => (uvA ? [uvA.getX(i), uvA.getY(i)] : [0, 0])),
+          uv: ids.map((i): V2 => (uvA ? [uvA.getX(i), flipV ? 1 - uvA.getY(i) : uvA.getY(i)] : [0, 0])),
           // three.js は読み込み時に UV を上下反転しないので glTF の座標系（左上原点）と一致する
           col: ids.map((i): V3 => (colA ? [colA.getX(i) * base[0], colA.getY(i) * base[1], colA.getZ(i) * base[2]] : [base[0], base[1], base[2]])),
         };
@@ -284,13 +285,6 @@ export async function sceneToDoc(root: THREE.Object3D, clips: THREE.AnimationCli
     });
   });
 
-  // three の OBJ/FBX ローダーは UV を v 上向きで返すことがある。glTF 以外はテクスチャを上下反転して合わせる
-  // （three の Texture.flipY=true の場合、画像の上が v=1 に対応している）
-  for (const [t, ti] of texCache) {
-    if (t.flipY) {
-      for (const o of doc.objects) if (o.tex === ti) for (const f of o.faces) f.uv = f.uv.map(([a, b]) => [a, 1 - b] as V2);
-    }
-  }
 
   // ---- アニメーション（各フレームでボーンを動かしてローカル姿勢を読み取る） ----
   if (clips.length && boneList.length) {
