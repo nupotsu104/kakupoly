@@ -11,7 +11,7 @@ import { inspectModelFile } from '../io/inspect';
 import { simplifyDoc, triCount } from '../core/simplify';
 import { exportGLB, exportOBJ } from '../io/gltf-export';
 import { encodePNG } from '../io/png';
-import { serialize, deserialize, storage, requestPersistence } from '../io/project';
+import { serialize, deserialize, storage, requestPersistence, packDoc, unpackDoc, storageEstimate } from '../io/project';
 import { sampleDoc } from '../core/sample';
 import { skinnedPositions } from '../core/skeleton';
 import { bindings, setBindings, resetBindings, prettyCombo, learnNextKey, TOURBOX_PRESET, pencilSettings, savePencil, type Binding } from '../input/keymap';
@@ -172,24 +172,47 @@ let currentId: string | null = null;
 let savedCounter = -1;
 export const isDirty = (): boolean => changeCounter() !== savedCounter;
 
-export async function saveToLibrary(silent = false, thumb?: string): Promise<void> {
+let autosaveFailShown = false;
+export async function saveToLibrary(silent = false, thumb?: string): Promise<boolean> {
   currentId ??= `p${Date.now().toString(36)}`;
+  let size = 0;
   try {
-    await storage.put({ id: currentId, name: state.doc.name, updated: Date.now(), thumb, data: serialize(state.doc) });
+    const data = await packDoc(state.doc);
+    size = data.byteLength;
+    await storage.put({ id: currentId, name: state.doc.name, updated: Date.now(), thumb, data, size });
     savedCounter = changeCounter();
-    if (!silent) toast('この端末に保存しました');
+    if (!silent) toast(`この端末に保存しました（${mb(size)}）`);
+    return true;
   } catch (e) {
-    toast(`保存できませんでした: ${(e as Error).message}`);
+    // 失敗は消える通知ではなく、消えない画面で知らせる（自動保存の失敗は1回だけ）
+    if (silent && autosaveFailShown) return false;
+    if (silent) autosaveFailShown = true;
+    const est = await storageEstimate();
+    const err = e as Error;
+    modal(
+      '保存できませんでした',
+      h(
+        'div',
+        {},
+        h('p', {}, silent ? '自動保存に失敗しました。このままアプリを閉じると、最近の変更が失われます。' : '端末内への保存に失敗しました。'),
+        h('pre', { class: 'errreport' }, [`エラー: ${err?.name ?? ''} ${err?.message ?? String(e)}`, `作品の大きさ（圧縮後）: ${size ? mb(size) : '不明'}`, est ? `保存領域: ${mb(est.usage)} 使用 / 上限 ${mb(est.quota)}` : '保存領域: 不明'].join('\n')),
+        h('p', { class: 'hint' }, '作品を失わないよう、「ファイル」→「.kpoly を書き出す」で「ファイル」アプリに保存してください。この画面のスクリーンショットを送ってもらえれば原因を調べます。'),
+        h('div', { class: 'actions' }, button('.kpoly を書き出す', () => downloadBlob(new Blob([serialize(state.doc)], { type: 'application/json' }), `${safe(state.doc.name)}.kpoly`), { cls: 'primary' })),
+      ),
+    );
+    return false;
   }
 }
+
+const mb = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))}KB` : `${(n / 1024 / 1024).toFixed(1)}MB`);
 
 export async function openLatestFromLibrary(): Promise<boolean> {
   try {
     const list = await storage.list();
     if (!list.length) return false;
     const p = await storage.get(list[0].id);
-    if (!p) return false;
-    setDoc(deserialize(p.data));
+    if (!p?.data) return false;
+    setDoc(await unpackDoc(p.data));
     currentId = p.id;
     savedCounter = changeCounter();
     return true;
@@ -273,6 +296,8 @@ export function openFileMenu(snapshot: () => string): void {
       lib.append(h('p', { class: 'hint' }, '端末内の保存領域が使えません（プライベートブラウズ等）'));
       return;
     }
+    const est = await storageEstimate();
+    if (est) lib.append(h('p', { class: 'hint' }, `保存領域: ${mb(est.usage)} 使用 / 上限 ${mb(est.quota)}`));
     if (!list.length) lib.append(h('p', { class: 'hint' }, 'まだありません'));
     for (const p of list)
       lib.append(
@@ -280,12 +305,12 @@ export function openFileMenu(snapshot: () => string): void {
           'div',
           { class: `libitem ${p.id === currentId ? 'active' : ''}` },
           p.thumb ? h('img', { src: p.thumb }) : h('div', { class: 'nothumb' }),
-          h('div', { class: 'meta' }, h('b', {}, p.name), h('small', {}, new Date(p.updated).toLocaleString())),
+          h('div', { class: 'meta' }, h('b', {}, p.name), h('small', {}, `${new Date(p.updated).toLocaleString()}${p.size ? `・${mb(p.size)}` : ''}`)),
           button('開く', async () => {
             if (isDirty() && !confirm('保存していない変更は失われます。開きますか？')) return;
             const d = await storage.get(p.id);
-            if (!d) return;
-            setDoc(deserialize(d.data));
+            if (!d?.data) return toast('この作品の中身が見つかりませんでした');
+            setDoc(await unpackDoc(d.data));
             currentId = p.id;
             savedCounter = changeCounter();
             m.close();
