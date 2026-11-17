@@ -12,6 +12,9 @@ import { M4, mPos, sub, cross, dot, add, mul, norm } from '../core/vec';
 import { buildBones, buildGeometry, buildTexture, boneColor } from './builders';
 import { makePostMaterial, makePs1Material, makeSharedUniforms } from './ps1-material';
 
+/** 陰影の強さ → 光の当たらない面の明るさ（1 なら陰なし） */
+const AMBIENT = { soft: 0.75, normal: 0.55, strong: 0.35 } as const;
+
 export interface Ray {
   o: V3;
   d: V3;
@@ -573,6 +576,7 @@ export class Viewport {
     this.shared.uJitter.value = v.jitter ? 1 : 0;
     this.shared.uAffine.value = v.affine ? 1 : 0;
     this.shared.uShade.value = v.shade === 'none' || (state.mode === 'rig' && v.weights) ? 0 : 1;
+    this.shared.uAmbient.value = AMBIENT[v.light] ?? AMBIENT.soft;
     const bg = new THREE.Color(v.bg);
     r.setClearColor(bg, 1);
     if (v.res > 0) {

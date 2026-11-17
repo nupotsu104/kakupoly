@@ -132,6 +132,7 @@ export function buildApp(root: HTMLElement): void {
       checkbox('15bitカラー＋ディザ', v.dither, set('dither')),
       checkbox('テクスチャをなめらかに', v.smoothTex, set('smoothTex'), 'オフならドットのまま（PS1風）'),
       h('label', {}, '陰影 ', select(v.shade, [['flat', 'カクカク'], ['smooth', 'なめらか'], ['none', 'なし（色そのまま）']], set('shade'))),
+      withHelp(h('label', {}, '陰影の強さ ', select(v.light, [['soft', '弱め（明るい）'], ['normal', '普通'], ['strong', '強め（暗い）']], set('light'))), 'top:view-light'),
       h('hr'),
       h('b', {}, '編集表示'),
       checkbox('ワイヤー', v.wire, set('wire')),

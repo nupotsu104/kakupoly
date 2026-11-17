@@ -3,7 +3,7 @@ import { state, notify, checkpoint, activeObject, activeTexture, activeClip, dro
 import { actions, runAction, ctx as actx } from '../actions';
 import { bindingsFor, prettyCombo } from '../input/keymap';
 import { h, button, numberInput, select, checkbox, clear, toast } from './dom';
-import { docStats } from '../core/doc';
+import { docStats, assignTexture, clearTint } from '../core/doc';
 import { selVerts, selFaces, joinObjects } from '../core/mesh-ops';
 import { reparentBone, newClip } from '../core/skeleton';
 import { resizeTexture } from '../core/paint';
@@ -190,7 +190,7 @@ function texturePanel(root: HTMLElement): void {
             h('span', { class: 'lbl' }, `${o.name} に使う`),
             select(String(o.tex), texOpts, (v) => {
               checkpoint();
-              o.tex = Number(v);
+              assignTexture(o, Number(v));
               if (o.tex >= 0) state.activeTex = o.tex;
               notify('doc', 'ui', 'tex');
             }),
@@ -203,10 +203,19 @@ function texturePanel(root: HTMLElement): void {
         button('全部のパーツに使う', () => {
           if (!t) return;
           checkpoint();
-          for (const ob of state.doc.objects) ob.tex = state.activeTex;
+          for (const ob of state.doc.objects) assignTexture(ob, state.activeTex);
           notify('doc', 'ui', 'tex');
           toast(`${state.doc.objects.length}個のパーツに「${t.name}」を貼りました`);
         }),
+        withHelp(
+          button('下地の色を外す', () => {
+            checkpoint();
+            const n = state.doc.objects.filter((ob) => ob.tex >= 0 && clearTint(ob)).length;
+            notify('doc', 'ui', 'tex');
+            toast(n ? `${n}個のパーツの下地の色を白に戻しました` : '外す下地の色はありませんでした');
+          }),
+          'tex:clear-tint',
+        ),
         button('2倍に拡大', () => {
           if (!t) return;
           checkpoint();

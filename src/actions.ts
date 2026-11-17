@@ -1,7 +1,7 @@
 // 操作の登録簿。ボタン・キーボード・TourBox・Apple Pencil のダブルタップ等はすべてここの id を呼ぶ。
 import { state, notify, checkpoint, dropCheckpoint, undo, redo, activeObject, activeClip, currentPose, type Mode } from './state';
 import * as ops from './core/mesh-ops';
-import { hexToRgb, newMesh, newTexture } from './core/doc';
+import { hexToRgb, newMesh, newTexture, assignTexture } from './core/doc';
 import { autoWeightsRigid, deleteBone, addBone, setKey, deleteKey, newClip, assignWeight, uniqueBoneName, restWorld } from './core/skeleton';
 import { mirrorBoneName } from './core/mesh-ops';
 import { nudge } from './view/transform';
@@ -383,7 +383,7 @@ def('new-texture', 'テクスチャ', 'テクスチャを新規作成（64×64�
   newTexture(state.doc, `tex${state.doc.textures.length + 1}`, 64, 64);
   state.activeTex = state.doc.textures.length - 1;
   const o = activeObject();
-  if (o && o.tex < 0) o.tex = state.activeTex;
+  if (o && o.tex < 0) assignTexture(o, state.activeTex);
   notify('doc', 'tex', 'ui');
 });
 function shiftColor(d: number): void {

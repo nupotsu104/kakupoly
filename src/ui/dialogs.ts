@@ -4,7 +4,7 @@ import { state, notify, checkpoint, setDoc, activeObject, currentPose, changeCou
 import { actions, ctx as actx } from '../actions';
 import { h, button, modal, select, checkbox, numberInput, pickFile, downloadBlob, toast, clear } from './dom';
 import { quantize, resizeBox, resizeNearest, to15bit, usedColors, type Img } from '../core/quantize';
-import { newDoc, newTexture } from '../core/doc';
+import { newDoc, newTexture, assignTexture } from '../core/doc';
 import { resizeTexture } from '../core/paint';
 import { loadImageFile, importFiles, DEFAULT_IMPORT, type ImportOptions } from '../io/import';
 import { inspectModelFile } from '../io/inspect';
@@ -118,13 +118,13 @@ export async function openImageImport(target?: Texture): Promise<void> {
             t = newTexture(state.doc, file.name.replace(/\.[^.]+$/, '').slice(0, 24), result.w, result.h);
             state.activeTex = state.doc.textures.length - 1;
             const o = activeObject();
-            if (o && o.tex < 0) o.tex = state.activeTex;
+            if (o && o.tex < 0) assignTexture(o, state.activeTex);
           }
           t.w = result.w;
           t.h = result.h;
           t.data = new Uint8ClampedArray(result.data);
           const ti = state.doc.textures.indexOf(t);
-          if (opt.allParts) for (const o of state.doc.objects) o.tex = ti;
+          if (opt.allParts) for (const o of state.doc.objects) assignTexture(o, ti);
           // 使った色をパレットの先頭に（大きな画像は数えるのに時間がかかるので小さく縮めてから）
           const small = result.w * result.h > 256 * 256 ? resizeNearest(result, 128, 128) : result;
           state.doc.palette = [...new Set([...usedColors(small, 32), ...state.doc.palette])].slice(0, 48);

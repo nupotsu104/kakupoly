@@ -15,6 +15,8 @@ export interface ViewSettings {
   affine: boolean;
   dither: boolean;
   shade: 'none' | 'flat' | 'smooth';
+  /** 陰影の強さ（暗い側の暗さ）。soft=弱め・normal=普通・strong=強め */
+  light: 'soft' | 'normal' | 'strong';
   wire: boolean;
   grid: boolean;
   ortho: boolean;
@@ -59,6 +61,7 @@ export const state = {
     affine: false,
     dither: true,
     shade: 'flat',
+    light: 'soft',
     wire: true,
     grid: true,
     ortho: false,

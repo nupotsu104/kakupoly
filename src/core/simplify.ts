@@ -9,7 +9,7 @@ import { trisToQuads } from './cleanup';
 export const triCount = (o: MeshObj): number => o.faces.reduce((t, f) => t + Math.max(0, f.v.length - 2), 0);
 
 /** 1つのオブジェクトを targetTris 三角形くらいまで減らす。減らした後の三角形数を返す */
-export async function simplifyObject(o: MeshObj, targetTris: number): Promise<number> {
+export async function simplifyObject(o: MeshObj, targetTris: number, opts: { permissive?: boolean } = {}): Promise<number> {
   const before = triCount(o);
   if (before <= targetTris || before < 8) return before;
   await MeshoptSimplifier.ready;
@@ -46,7 +46,7 @@ export async function simplifyObject(o: MeshObj, targetTris: number): Promise<nu
   const target = Math.max(3, Math.floor(targetTris) * 3);
   // 同じ位置で UV が違う頂点（継ぎ目）は、そのままだと動かせず削れないことがある。足りなければ継ぎ目も崩してよい設定でやり直す
   let [out] = MeshoptSimplifier.simplifyWithAttributes(indices, positions, 3, attributes, 5, [0.5, 0.5, 0.2, 0.2, 0.2], null, target, 1, []);
-  if (out.length > target * 1.3) [out] = MeshoptSimplifier.simplifyWithAttributes(indices, positions, 3, attributes, 5, [0.5, 0.5, 0.2, 0.2, 0.2], null, target, 1, ['Permissive']);
+  if (opts.permissive !== false && out.length > target * 1.3) [out] = MeshoptSimplifier.simplifyWithAttributes(indices, positions, 3, attributes, 5, [0.5, 0.5, 0.2, 0.2, 0.2], null, target, 1, ['Permissive']);
 
   const faces: MeshObj['faces'] = [];
   for (let i = 0; i < out.length; i += 3) {

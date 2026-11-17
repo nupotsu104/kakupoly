@@ -85,3 +85,41 @@ export const rgbToHex = (c: ArrayLike<number>, scale = 255): string => {
       .padStart(2, '0');
   return `#${h(c[0])}${h(c[1])}${h(c[2])}`;
 };
+
+/**
+ * 部品全体が1色で塗られていれば、その色を返す（他ソフトの「材質の色」を読み込んだときなど）。
+ * 色がばらばら（頂点ごとに塗ってある）なら null
+ */
+export function uniformTint(o: MeshObj): V3 | null {
+  let c: V3 | null = null;
+  for (const f of o.faces)
+    for (const x of f.col) {
+      if (!c) c = x;
+      else if (Math.abs(x[0] - c[0]) > 1e-4 || Math.abs(x[1] - c[1]) > 1e-4 || Math.abs(x[2] - c[2]) > 1e-4) return null;
+    }
+  return c;
+}
+
+/** 頂点カラー（テクスチャに掛け合わされる下地の色）をすべて白に戻す。変わったら true */
+export function clearTint(o: MeshObj): boolean {
+  let changed = false;
+  for (const f of o.faces)
+    for (const x of f.col)
+      if (x[0] !== 1 || x[1] !== 1 || x[2] !== 1) {
+        x[0] = x[1] = x[2] = 1;
+        changed = true;
+      }
+  return changed;
+}
+
+/**
+ * 部品にテクスチャを割り当てる。テクスチャのなかった部品が1色で塗られていたら（材質の色）、
+ * その色はテクスチャに掛け合わされて暗く濁るので白に戻す（3ds Max などでも拡散色にマップを
+ * 割り当てると元の色は使われない）。下地の色を外したら true
+ */
+export function assignTexture(o: MeshObj, ti: number): boolean {
+  const had = o.tex >= 0;
+  o.tex = ti;
+  if (ti < 0 || had || !uniformTint(o)) return false;
+  return clearTint(o);
+}

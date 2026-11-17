@@ -20,7 +20,7 @@ export const makeSharedUniforms = (): SharedUniforms => ({
   uAffine: { value: 0 },
   uShade: { value: 1 },
   uLightDir: { value: new THREE.Vector3(0.4, 0.8, 0.45).normalize() },
-  uAmbient: { value: 0.55 },
+  uAmbient: { value: 0.75 },
 });
 
 const VERT = /* glsl */ `
