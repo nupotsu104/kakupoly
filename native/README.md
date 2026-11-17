@@ -17,9 +17,19 @@ Web版をそのまま Swift で作り直す（C案）ための場所です。段
 3. できた `KakuPoly.swiftpm` をタップすると Swift Playgrounds で開く（App Store の Swift Playgrounds が必要）
 4. 右上の ▶（実行）
 
+### KakuPoly.swiftpm が「Prewarm failed」で起動しないとき
+
+Swift Playgrounds で新規作成した「App」に、ファイルを入れて動かす方法です。
+
+1. Swift Playgrounds で新しい「App」を作り、そのまま ▶ で動くことを確認（動かなければ Swift Playgrounds 側の問題）
+2. 最初からある `MyApp.swift` と `ContentView.swift` を削除
+3. 「挿入元」→ `kakupoly-main/native/PlaygroundsFiles` の 12 個の .swift をすべて追加
+4. ▶
+
 ## 構成
 
 - `Core/` … 画面に依存しない計算部分。Linux でもビルド・テストできる（`cd native/Core && swift test`）
 - `KakuPoly.swiftpm/App/` … 画面・Metal 描画・入力
 - `KakuPoly.swiftpm/Core/` … `Core/` の複製。`node scripts/sync-native.mjs` で更新（直接編集しない）
+- `PlaygroundsFiles/` … アプリの全ソースを1つのフォルダにまとめた複製（同じスクリプトで更新）
 - テストの「答え」は Web版のコードから作る: `npx rolldown scripts/gen-native-fixtures.ts --platform node -o /tmp/gen.mjs && node /tmp/gen.mjs`
