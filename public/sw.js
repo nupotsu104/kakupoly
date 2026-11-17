@@ -1,5 +1,6 @@
 // オフライン起動用: 一度開いたファイルを保存しておき、通信できない時はそれを返す
 const CACHE = 'kakupoly-v1';
+// 版を上げると古いキャッシュは消える。通常はネット優先なので更新はそのまま反映される
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(['./', './index.html', './manifest.webmanifest'])).then(() => self.skipWaiting()));
 });
