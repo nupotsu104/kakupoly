@@ -8,6 +8,7 @@ import { newDoc, newTexture } from '../core/doc';
 import { resizeTexture } from '../core/paint';
 import { loadImageFile, importFiles, DEFAULT_IMPORT, type ImportOptions } from '../io/import';
 import { inspectModelFile } from '../io/inspect';
+import { checkForUpdate, versionLabel } from '../update';
 import { simplifyDoc, triCount } from '../core/simplify';
 import { exportGLB, exportOBJ } from '../io/gltf-export';
 import { encodePNG } from '../io/png';
@@ -240,6 +241,7 @@ export function openFileMenu(snapshot: () => string): void {
       button('💾 この端末に保存', () => saveToLibrary(false, snapshot()).then(refresh), { cls: 'big' }),
     ),
     h('div', { class: 'prow' }, h('span', { class: 'lbl' }, '作品名'), name),
+    h('div', { class: 'prow' }, h('span', { class: 'lbl' }, `アプリの版: ${versionLabel()}`), button('更新を確認', () => checkForUpdate(true))),
     h(
       'div',
       { class: 'cols' },
