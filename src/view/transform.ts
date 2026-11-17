@@ -3,7 +3,7 @@
 import type { Quat, V3 } from '../core/types';
 import { state, activeObject, activeClip, currentPose, checkpoint, dropCheckpoint, notify } from '../state';
 import { selVerts } from '../core/mesh-ops';
-import { symmetricMover, mirrorBone, mirrorV, SYM_EPS } from '../core/symmetry';
+import { symmetricMover, mirrorBone, mirrorV, SYM_EPS, canSplitIsland, splitIsland } from '../core/symmetry';
 import { moveBoneRest, restWorld, worldMatrices, setKey, newClip } from '../core/skeleton';
 import { add, centroid, dot, mDecompose, mIdent, mInvert, mPoint, mPos, mul, qConj, qFromAxisAngle, qMul, qNorm, qRotate, sub, mDir, norm } from '../core/vec';
 
@@ -73,11 +73,18 @@ function meshSession(info: { pivot: V3; axes: Axes; can: Session['can'] }): Sess
     notify('doc');
   };
   const { pivot, axes } = info;
+  // 中心にまたがる立体を丸ごと選んで横に動かしたら、鏡写しのコピーを作って左右に分ける
+  const splittable = state.symmetryX && canSplitIsland(o, vs);
+  let split: ((fn: (p: V3) => V3) => void) | null = null;
   return {
     ...info,
     translate: (d) => {
       const dd = snapV(d);
-      apply((p) => add(p, dd));
+      if (splittable && !split && Math.abs(dd[0]) > 1e-6) split = splitIsland(state.doc, o, vs, orig);
+      if (split) {
+        split((p) => add(p, dd));
+        notify('doc');
+      } else apply((p) => add(p, dd));
     },
     rotate: (axis, angle) => {
       const q = qFromAxisAngle(axis, snapA(angle));

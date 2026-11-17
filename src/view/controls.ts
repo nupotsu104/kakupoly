@@ -52,6 +52,7 @@ export class Controls {
   private hover: Handle | null = null;
   private hoverPt: V2 | null = null;
   private box: { x0: number; y0: number; x1: number; y1: number } | null = null;
+  private lastTap: { t: number; x: number; y: number } | null = null;
 
   constructor(private vp: Viewport) {
     const el = vp.overlay;
@@ -227,7 +228,19 @@ export class Controls {
       case 'box':
         if (cancel) break;
         if (d.moved && this.box) this.boxSelect(this.box, d.additive);
-        else this.tapSelect(x, y, d.additive);
+        else {
+          // 同じ所を素早く2回タップ → その立体（つながっている部分）を丸ごと選ぶ
+          const now = performance.now();
+          const lt = this.lastTap;
+          const dbl = state.mode === 'model' && lt && now - lt.t < 400 && Math.hypot(x - lt.x, y - lt.y) < 20;
+          if (dbl) {
+            this.lastTap = null;
+            this.selectLinked();
+          } else {
+            this.lastTap = { t: now, x, y };
+            this.tapSelect(x, y, d.additive);
+          }
+        }
         break;
       case 'tap':
         if (!d.moved && !cancel) this.tapRigAnim(x, y);
@@ -460,6 +473,15 @@ export class Controls {
         for (const f of tmp.faces) sel.faces.delete(f);
       } else mirrorSelection(o, sel);
     }
+    notify('sel', 'ui');
+  }
+
+  private selectLinked(): void {
+    const o = activeObject();
+    if (!o || ops.selVerts(o, state.sel).size === 0) return;
+    ops.selectLinked(o, state.sel);
+    if (this.symOn()) mirrorSelection(o, state.sel);
+    toast('つながっている部分を丸ごと選びました');
     notify('sel', 'ui');
   }
 

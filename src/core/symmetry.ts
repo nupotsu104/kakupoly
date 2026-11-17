@@ -217,3 +217,62 @@ export function centerX(doc: Doc): number {
   });
   return dx;
 }
+
+/**
+ * 中心（X=0）にまたがる立体を丸ごと選んでいて、その立体が自分自身で左右対称なら true。
+ * この状態で横に動かすと、鏡写しのコピーを作って左右に分ける（splitIsland）。
+ */
+export function canSplitIsland(o: MeshObj, vs: number[]): boolean {
+  if (vs.length < 3) return false;
+  const set = new Set(vs);
+  const eps = symEps(o);
+  if (!vs.some((v) => Math.abs(o.verts[v][0]) > eps)) return false;
+  // 選んだ頂点を使う面が、選んでいない頂点を含まない（＝立体を丸ごと選んでいる）
+  for (const f of o.faces) {
+    const inSel = f.v.filter((v) => set.has(v)).length;
+    if (inSel > 0 && inSel < f.v.length) return false;
+  }
+  if (!o.faces.some((f) => f.v.every((v) => set.has(v)))) return false;
+  // 全ての頂点の鏡写しが、選んだ頂点の中にある
+  return pairVerts(o, vs, vs, eps).size === vs.length;
+}
+
+/**
+ * 立体を左右に分ける。選んだ立体（元）はそのまま動かす側、鏡写しのコピーが反対側に付いていく。
+ * 戻り値の関数に「元の位置 → 新しい位置」を渡すと、元とコピーの両方を動かす。
+ */
+export function splitIsland(doc: Doc, o: MeshObj, vs: number[], orig: Map<number, V3>): (fn: (p: V3) => V3) => void {
+  for (const v of vs) o.verts[v] = [...orig.get(v)!] as V3;
+  const partner = pairVerts(o, vs, vs, symEps(o));
+  const set = new Set(vs);
+  const boneMap = doc.bones.map((_, i) => {
+    const m = mirrorBone(doc, i);
+    return m >= 0 ? m : i;
+  });
+  // 頂点を複製（ボーンの割り当ては .L ⇔ .R を入れ替える）
+  const dup = new Map<number, number>();
+  while (o.skin.length < o.verts.length) o.skin.push([]);
+  for (const v of vs) {
+    dup.set(v, o.verts.length);
+    o.verts.push([...orig.get(v)!] as V3);
+    o.skin.push((o.skin[v] ?? []).map(([b, w]) => [boneMap[b] ?? b, w] as [number, number]));
+  }
+  // 面を複製
+  for (const f of [...o.faces]) {
+    if (!f.v.every((v) => set.has(v))) continue;
+    o.faces.push({
+      v: f.v.map((v) => dup.get(v)!),
+      uv: f.uv.map((p) => [p[0], p[1]] as [number, number]),
+      col: f.col.map((c) => [c[0], c[1], c[2]] as V3),
+    });
+  }
+  return (fn) => {
+    for (const v of vs) {
+      const q = fn(orig.get(v)!);
+      o.verts[v] = q;
+      // コピー側で「v の鏡の位置にいた頂点」を、動いた後の鏡の位置へ
+      const m = partner.get(v);
+      if (m !== undefined) o.verts[dup.get(m)!] = mirrorV(q);
+    }
+  };
+}

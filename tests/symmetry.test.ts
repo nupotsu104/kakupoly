@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { newDoc, newMesh, emptySelection } from '../src/core/doc';
 import * as ops from '../src/core/mesh-ops';
-import { mirrorSelection, symmetricMover, symmetryMap, mirrorBone, pairBoneBase, diagnoseSymmetry, centerX } from '../src/core/symmetry';
+import { mirrorSelection, symmetricMover, symmetryMap, mirrorBone, pairBoneBase, diagnoseSymmetry, centerX, canSplitIsland, splitIsland } from '../src/core/symmetry';
 import { addBone } from '../src/core/skeleton';
 import type { MeshObj } from '../src/core/types';
 
@@ -124,5 +124,34 @@ describe('左右対称モード', () => {
       ops.addPrimitive(o, emptySelection(), k, { size: 0.5, sides: k === 'sphere' ? 8 : 6, center: [0, 1, 0.3] });
       expect(diagnoseSymmetry(doc, 0).same, k).toBe(1);
     }
+  });
+
+  it('中心の立方体を丸ごと横に動かすと、鏡写しのコピーができて左右に分かれる', () => {
+    const doc = newDoc();
+    const o = newMesh(doc, 'm');
+    ops.addPrimitive(o, emptySelection(), 'cube', { size: 1, center: [0, 3, 0] }); // 胴体のつもり
+    ops.addPrimitive(o, emptySelection(), 'cube', { size: 0.2, center: [0, 1, 0] }); // 動かす立体
+    const vs = [8, 9, 10, 11, 12, 13, 14, 15];
+    expect(canSplitIsland(o, vs)).toBe(true);
+    expect(canSplitIsland(o, [8, 9, 10])).toBe(false); // 丸ごとでない
+    const orig = new Map(vs.map((v) => [v, [...o.verts[v]] as [number, number, number]]));
+    const move = splitIsland(doc, o, vs, orig);
+    move((p) => [p[0] + 0.7, p[1] + 0.1, p[2]]);
+    expect(o.verts.length).toBe(24);
+    expect(o.faces.length).toBe(18);
+    const xsA = vs.map((v) => o.verts[v][0]);
+    const xsB = o.verts.slice(16).map((p) => p[0]);
+    expect(Math.min(...xsA)).toBeCloseTo(0.6);
+    expect(Math.max(...xsB)).toBeCloseTo(-0.6);
+    expect(isSymmetric(o)).toBe(true);
+    // コピーも表向き（外向き）の閉じた立体
+    const copy: MeshObj = { ...o, verts: o.verts, faces: o.faces.slice(12) };
+    for (const f of copy.faces) {
+      const n = ops.faceNormal(copy, f);
+      const c = ops.faceCenter(copy, f);
+      expect(n[0] * (c[0] + 0.7) + n[1] * (c[1] - 1.1) + n[2] * c[2]).toBeGreaterThan(0);
+    }
+    // 分かれた後は、もう分けない（反対側は追従する）
+    expect(canSplitIsland(o, vs)).toBe(false);
   });
 });
