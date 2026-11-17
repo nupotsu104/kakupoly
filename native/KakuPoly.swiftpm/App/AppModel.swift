@@ -16,6 +16,16 @@ final class AppModel: ObservableObject {
     @Published var log: [String] = []
     @Published var hoverPoint: CGPoint? = nil
     @Published var errorMessage: String? = nil
+    /// 画面に常に出す診断（Metal の状態・描画回数・エラー）
+    @Published var diag: [String] = ["起動中…"]
+    /// 描画側が書き込む診断の元データ（毎フレーム SwiftUI を更新しないよう、1秒ごとに diag へ写す）
+    var diagMetal = "Metal: 未確認"
+    var diagShader = "シェーダー: 未確認"
+    var diagError: String? = nil
+    var drawCount = 0
+    var drawSkip = ""
+    var drawableSize = CGSize.zero
+    private var diagTimer: Timer?
 
     /// 視点（毎フレーム変わるので @Published にしない）
     var camera = OrbitCamera()
@@ -28,6 +38,19 @@ final class AppModel: ObservableObject {
             doc = Doc(name: "空")
         }
         camera.frame(Geometry.bounds(doc))
+        diagTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.refreshDiag() }
+    }
+
+    func refreshDiag() {
+        var d = [
+            diagMetal,
+            diagShader,
+            "描画: \(drawCount)回  画面 \(Int(drawableSize.width))×\(Int(drawableSize.height))",
+            "作品: \(doc.name)  オブジェクト\(doc.objects.count) 頂点\(doc.objects.reduce(0) { $0 + $1.verts.count })",
+        ]
+        if !drawSkip.isEmpty { d.append("描画を飛ばした理由: \(drawSkip)") }
+        if let e = diagError { d.append("エラー: \(e)") }
+        if d != diag { diag = d }
     }
 
     var clip: Clip? { doc.clips.indices.contains(clipIndex) ? doc.clips[clipIndex] : nil }

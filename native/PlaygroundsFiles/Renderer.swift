@@ -46,9 +46,11 @@ final class Renderer: NSObject, MTKViewDelegate {
 
     func attach(_ view: MTKView) {
         guard let dev = view.device ?? MTLCreateSystemDefaultDevice() else {
-            model.errorMessage = "Metal が使えません"
+            model.diagMetal = "Metal: 使えません"
+            model.diagError = "この環境では Metal が使えません"
             return
         }
+        model.diagMetal = "Metal: \(dev.name)"
         device = dev
         view.device = dev
         view.colorPixelFormat = .bgra8Unorm
@@ -69,8 +71,10 @@ final class Renderer: NSObject, MTKViewDelegate {
             pd.fragmentFunction = lib.makeFunction(name: "post_fs")
             pd.colorAttachments[0].pixelFormat = view.colorPixelFormat
             postPipeline = try dev.makeRenderPipelineState(descriptor: pd)
+            model.diagShader = "シェーダー: OK"
         } catch {
-            model.errorMessage = "シェーダーの準備に失敗: \(error.localizedDescription)"
+            model.diagShader = "シェーダー: 失敗"
+            model.diagError = "\(error)"
         }
         let ds = MTLDepthStencilDescriptor()
         ds.depthCompareFunction = .less
@@ -110,23 +114,24 @@ final class Renderer: NSObject, MTKViewDelegate {
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 
     func draw(in view: MTKView) {
-        guard scenePipeline != nil, postPipeline != nil,
-              let drawable = view.currentDrawable,
-              let pass = view.currentRenderPassDescriptor,
-              let cmd = queue.makeCommandBuffer() else { return }
+        model.drawableSize = view.drawableSize
+        guard scenePipeline != nil, postPipeline != nil else { model.drawSkip = "シェーダーが準備できていない"; return }
+        guard let drawable = view.currentDrawable else { model.drawSkip = "描画先（drawable）がない"; return }
+        guard let pass = view.currentRenderPassDescriptor else { model.drawSkip = "描画の設定（pass）がない"; return }
+        guard let cmd = queue.makeCommandBuffer() else { model.drawSkip = "コマンドを作れない"; return }
         let now = CACurrentMediaTime()
         model.advance(dt: Float(min(0.1, now - lastTime)))
         lastTime = now
         rebuildIfNeeded()
 
         let ds = view.drawableSize
-        guard ds.width > 0, ds.height > 0 else { return }
+        guard ds.width > 0, ds.height > 0 else { model.drawSkip = "画面の大きさが0"; return }
         let aspect = Float(ds.width / ds.height)
         // PS1表示なら縦240ライン、そうでなければ端末の解像度のまま
         let h = model.ps1 ? 240 : Int(ds.height)
         let w = model.ps1 ? max(1, Int((240 * Double(aspect)).rounded())) : Int(ds.width)
         ensureTargets(width: w, height: h)
-        guard let lowColor, let lowDepth else { return }
+        guard let lowColor, let lowDepth else { model.drawSkip = "低解像度の描画先を作れない"; return }
 
         // ---- シーン（低解像度） ----
         let sp = MTLRenderPassDescriptor()
@@ -180,5 +185,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
         cmd.present(drawable)
         cmd.commit()
+        model.drawCount += 1
+        model.drawSkip = ""
     }
 }

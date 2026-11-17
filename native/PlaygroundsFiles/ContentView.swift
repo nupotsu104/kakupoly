@@ -19,6 +19,7 @@ struct ContentView: View {
                         .allowsHitTesting(false)
                 }
                 inputLog
+                diagnostics
             }
         }
         .background(Color(red: 0.08, green: 0.08, blue: 0.12))
@@ -54,6 +55,20 @@ struct ContentView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(Color(red: 0.11, green: 0.12, blue: 0.17))
+    }
+
+    /// 右下: アプリ自身の状態（黒い画面の原因を調べるため）
+    private var diagnostics: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            ForEach(Array(model.diag.enumerated()), id: \.offset) { _, line in
+                Text(line).font(.system(.caption2, design: .monospaced))
+            }
+        }
+        .padding(8)
+        .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+        .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .allowsHitTesting(false)
     }
 
     private var inputLog: some View {

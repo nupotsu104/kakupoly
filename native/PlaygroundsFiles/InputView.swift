@@ -22,6 +22,9 @@ final class InputView: MTKView, UIPencilInteractionDelegate {
     override init(frame: CGRect, device: MTLDevice?) {
         super.init(frame: frame, device: device)
         isMultipleTouchEnabled = true
+        // 描画が一度も行われなければ灰色に見える（黒なら描画はされている、の目印）
+        backgroundColor = .darkGray
+        clearColor = MTLClearColor(red: 0.3, green: 0, blue: 0.3, alpha: 1)
         let pi = UIPencilInteraction()
         pi.delegate = self
         addInteraction(pi)
