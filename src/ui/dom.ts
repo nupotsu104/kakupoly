@@ -102,11 +102,33 @@ export function modal(title: string, body: HTMLElement, opts: { wide?: boolean; 
   return { close, root };
 }
 
+const isIOS = (): boolean => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+/**
+ * ファイルを選ぶ。accept は ".glb,image/*" のような指定。
+ * iPad / iPhone では、iPadOS が知らない拡張子（.glb .kpoly など）を指定するとファイルが灰色で選べなくなるので、
+ * 拡張子の指定がある時は何でも選べるようにしておき、選んだ後で拡張子を確かめる。
+ */
 export function pickFile(accept: string, multiple = false): Promise<File[]> {
+  const tokens = accept.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
+  const exts = tokens.filter((t) => t.startsWith('.'));
+  const mimes = tokens.filter((t) => !t.startsWith('.'));
+  const loose = isIOS() && exts.length > 0;
+  const ok = (f: File): boolean => {
+    const name = f.name.toLowerCase();
+    if (exts.some((e) => name.endsWith(e))) return true;
+    return mimes.some((m) => (m.endsWith('/*') ? f.type.startsWith(m.slice(0, -1)) : f.type === m));
+  };
   return new Promise((resolve) => {
-    const input = h('input', { type: 'file', accept, multiple, style: 'display:none' });
+    const input = h('input', { type: 'file', accept: loose ? undefined : accept, multiple, style: 'display:none' });
     input.addEventListener('change', () => {
-      resolve([...(input.files ?? [])]);
+      const all = [...(input.files ?? [])];
+      const good = loose ? all.filter(ok) : all;
+      if (good.length < all.length) {
+        const bad = all.filter((f) => !good.includes(f)).map((f) => f.name);
+        toast(`この形式は読み込めません: ${bad.join(', ')}（対応: ${tokens.join(' ')}）`, 5000);
+      }
+      resolve(good);
       input.remove();
     });
     document.body.append(input);
