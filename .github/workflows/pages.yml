@@ -28,11 +28,21 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      # ネイティブ版（Swift Playgrounds 用）を zip にして公開ページに置く
+      - run: node scripts/sync-native.mjs --check
+      - run: cd native && zip -qr ../dist/KakuPoly.swiftpm.zip KakuPoly.swiftpm
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
+  # ネイティブ版の計算部分（Swift）のテスト。Web版と同じ結果になるかも確かめる
+  native-core:
+    runs-on: ubuntu-latest
+    container: swift:6.0-noble
+    steps:
+      - uses: actions/checkout@v4
+      - run: cd native/Core && swift test
   deploy:
-    needs: build
+    needs: [build, native-core]
     runs-on: ubuntu-latest
     environment:
       name: github-pages

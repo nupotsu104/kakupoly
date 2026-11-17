@@ -4,3 +4,5 @@ dist-single
 *.log
 .DS_Store
 shots
+native/Core/.build
+native/**/.swiftpm/xcode
