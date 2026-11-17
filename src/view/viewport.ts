@@ -449,21 +449,22 @@ export class Viewport {
     return (z * fovK) / this.h;
   }
 
-  /** メッシュとレイの交差。only を指定するとそのオブジェクトだけ */
-  raycast(ray: Ray, only = -1): Hit | null {
+  /** メッシュとレイの交差。only を指定するとそのオブジェクトだけ。positions でポーズ後の頂点を渡せる */
+  raycast(ray: Ray, only = -1, positions?: (oi: number) => V3[], minT = 1e-6): Hit | null {
     let best: Hit | null = null;
     state.doc.objects.forEach((o, oi) => {
       if (!o.visible || (only >= 0 && oi !== only)) return;
+      const P = positions ? positions(oi) : o.verts;
       o.faces.forEach((f, fi) => {
-        const a = o.verts[f.v[0]];
+        const a = P[f.v[0]];
         for (let k = 1; k < f.v.length - 1; k++) {
-          const b = o.verts[f.v[k]],
-            c = o.verts[f.v[k + 1]];
+          const b = P[f.v[k]],
+            c = P[f.v[k + 1]];
           const e1 = sub(b, a),
             e2 = sub(c, a);
           const pv = cross(ray.d, e2);
           const det = dot(e1, pv);
-          if (o.doubleSided ? Math.abs(det) < 1e-12 : det < 1e-12) continue;
+          if (o.doubleSided || minT > 1e-6 ? Math.abs(det) < 1e-12 : det < 1e-12) continue;
           const inv = 1 / det;
           const tv = sub(ray.o, a);
           const u = dot(tv, pv) * inv;
@@ -472,7 +473,7 @@ export class Viewport {
           const v = dot(ray.d, qv) * inv;
           if (v < -1e-6 || u + v > 1 + 1e-6) continue;
           const t = dot(e2, qv) * inv;
-          if (t <= 1e-6 || (best && t >= best.t)) continue;
+          if (t <= minT || (best && t >= best.t)) continue;
           const w = 1 - u - v;
           const ua = f.uv[0],
             ub = f.uv[k],

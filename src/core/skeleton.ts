@@ -264,3 +264,28 @@ export function skinnedPositions(doc: Doc, o: MeshObj, pose: Pose[]): V3[] {
     return out;
   });
 }
+
+/** 直線補間で再現できるキーを間引く（読み込んだアニメの毎フレームキーを軽くする） */
+export function reduceKeys(keys: Key[], posEps = 1e-4, rotEps = 1e-4, sclEps = 1e-4): Key[] {
+  if (keys.length <= 2) {
+    if (keys.length === 2 && keyNear(keys[0], keys[1], posEps, rotEps, sclEps)) return [keys[0]];
+    return keys;
+  }
+  const out: Key[] = [keys[0]];
+  for (let i = 1; i < keys.length - 1; i++) {
+    const a = out[out.length - 1],
+      b = keys[i + 1],
+      k = keys[i];
+    const t = (k.f - a.f) / (b.f - a.f);
+    const guess: Key = { f: k.f, pos: lerp(a.pos, b.pos, t), rot: qSlerp(a.rot, b.rot, t), scl: lerp(a.scl, b.scl, t) };
+    if (!keyNear(guess, k, posEps, rotEps, sclEps)) out.push(k);
+  }
+  out.push(keys[keys.length - 1]);
+  if (out.length === 2 && keyNear(out[0], out[1], posEps, rotEps, sclEps)) return [out[0]];
+  return out;
+}
+
+function keyNear(a: Key, b: Key, pe: number, re: number, se: number): boolean {
+  const qd = Math.abs(a.rot[0] * b.rot[0] + a.rot[1] * b.rot[1] + a.rot[2] * b.rot[2] + a.rot[3] * b.rot[3]);
+  return dist(a.pos, b.pos) < pe && 1 - qd < re && dist(a.scl, b.scl) < se;
+}

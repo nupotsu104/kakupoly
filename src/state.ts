@@ -45,7 +45,8 @@ export const state = {
   axis: 1 as 0 | 1 | 2,
   localAxes: true,
   keepChildren: true,
-  fingerTool: false,
+  /** 選択の仕方: 置き換え / 追加 / 解除 */
+  selOp: 'set' as 'set' | 'add' | 'sub',
   activeTex: 0,
   uvSnap: true,
   showUV: true,
