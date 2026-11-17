@@ -166,6 +166,14 @@ export function openFileMenu(snapshot: () => string): void {
   });
   const lib = h('div', { class: 'library' }, h('p', { class: 'hint' }, '読み込み中…'));
   body.append(
+    // よく使う操作は一番上に大きく（下の方はスクロールしないと見えないことがあるため）
+    h(
+      'div',
+      { class: 'bigbtns' },
+      button('📂 モデルを読み込む（.glb .obj .fbx）', () => doImport(false, m.close), { cls: 'primary big' }),
+      button('📄 .kpoly を開く', () => openKpoly(m.close), { cls: 'big' }),
+      button('💾 この端末に保存', () => saveToLibrary(false, snapshot()).then(refresh), { cls: 'big' }),
+    ),
     h('div', { class: 'prow' }, h('span', { class: 'lbl' }, '作品名'), name),
     h(
       'div',
@@ -184,18 +192,7 @@ export function openFileMenu(snapshot: () => string): void {
             saveToLibrary(false, snapshot()).then(refresh);
           }),
           button('.kpoly を書き出す', () => downloadBlob(new Blob([serialize(state.doc)], { type: 'application/json' }), `${safe(state.doc.name)}.kpoly`)),
-          button('.kpoly を開く', async () => {
-            const [f] = await pickFile('.kpoly,application/json');
-            if (!f) return;
-            try {
-              setDoc(deserialize(await f.text()));
-              currentId = null;
-              m.close();
-              actx.vp?.frame();
-            } catch (e) {
-              toast((e as Error).message);
-            }
-          }),
+          button('.kpoly を開く', () => openKpoly(m.close)),
           button('新規（空）', () => {
             if (isDirty() && !confirm('保存していない変更は失われます。新規にしますか？')) return;
             setDoc(newDoc());
@@ -210,7 +207,7 @@ export function openFileMenu(snapshot: () => string): void {
             actx.vp?.frame();
           }),
         ),
-        h('h3', {}, '他のソフトのモデルを読み込む'),
+        h('h3', {}, '他のソフトのモデルを読み込む（下の青いボタンを押す）'),
         h('p', { class: 'hint' }, '.glb / .gltf / .obj / .fbx に対応。OBJ は .mtl と画像も一緒に選んでください。三角形は四角形にまとめ直し、大きい画像は縮めます。'),
         importOptionsForm(),
         h(
@@ -266,6 +263,19 @@ export function openFileMenu(snapshot: () => string): void {
       );
   }
   refresh();
+}
+
+async function openKpoly(close: () => void): Promise<void> {
+  const [f] = await pickFile('.kpoly,application/json');
+  if (!f) return;
+  try {
+    setDoc(deserialize(await f.text()));
+    currentId = null;
+    close();
+    actx.vp?.frame();
+  } catch (e) {
+    toast((e as Error).message);
+  }
 }
 
 const safe = (s: string) => s.replace(/[\\/:*?"<>|\s]+/g, '_') || 'model';

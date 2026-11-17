@@ -766,3 +766,16 @@ textarea {
   border-color: #ff6ec7;
   color: #2a0820;
 }
+
+.bigbtns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.btn.big {
+  min-height: 52px;
+  font-size: 15px;
+  padding: 10px 16px;
+  flex: 1 1 200px;
+}
