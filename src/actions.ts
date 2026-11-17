@@ -6,6 +6,7 @@ import { autoWeightsRigid, deleteBone, addBone, setKey, deleteKey, newClip, assi
 import { mirrorBoneName } from './core/mesh-ops';
 import { nudge } from './view/transform';
 import { mPos } from './core/vec';
+import { mirrorBone, SYM_EPS } from './core/symmetry';
 import type { V3 } from './core/types';
 import { toast } from './ui/dom';
 import type { Viewport } from './view/viewport';
@@ -147,10 +148,10 @@ def('snap-toggle', '変形', 'グリッド吸着 切替', () => {
   toast(`グリッド吸着: ${state.snap ? 'オン' : 'オフ'}`);
   notify('ui');
 });
-def('symmetry-toggle', '変形', 'X対称編集 切替', () => {
+def('symmetry-toggle', '変形', '左右対称モード 切替', () => {
   state.symmetryX = !state.symmetryX;
-  toast(`X対称編集: ${state.symmetryX ? 'オン' : 'オフ'}`);
-  notify('ui');
+  toast(`左右対称モード: ${state.symmetryX ? 'オン' : 'オフ'}`);
+  notify('ui', 'view');
 });
 
 // ---------------- 視点 ----------------
@@ -426,7 +427,14 @@ def('weights-assign', 'リグ', '選択頂点をアクティブボーンに割�
   const vs = ops.selVerts(o, state.sel);
   if (!vs.size) return toast('頂点を選んでください');
   checkpoint();
-  for (const v of vs) assignWeight(o, v, state.activeBone, 1);
+  // 左右対称モードでは、ボーンと反対側にある頂点は反対側のボーン（.L ⇔ .R）へ
+  const mb = state.symmetryX ? mirrorBone(state.doc, state.activeBone) : -1;
+  const bx = mPos(restWorld(state.doc.bones)[state.activeBone])[0];
+  for (const v of vs) {
+    const vx = o.verts[v][0];
+    const opposite = mb >= 0 && Math.abs(vx) > SYM_EPS && Math.sign(vx) === -Math.sign(bx);
+    assignWeight(o, v, opposite ? mb : state.activeBone, 1);
+  }
   notify('doc', 'ui');
 });
 def('weights-view', 'リグ', 'ウェイト色表示 切替', () => ((state.view.weights = !state.view.weights), notify('view', 'ui')));

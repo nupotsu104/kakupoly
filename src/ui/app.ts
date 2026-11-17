@@ -37,6 +37,7 @@ export function buildApp(root: HTMLElement): void {
   const modeTabs = h('div', { class: 'modes' });
   const undoBtn = withHelp(button('↶', () => runAction('undo'), { title: '取り消し（指2本タップでも）', cls: 'icon' }), 'top:undo');
   const redoBtn = withHelp(button('↷', () => runAction('redo'), { title: 'やり直し（指3本タップでも）', cls: 'icon' }), 'top:redo');
+  const symBtn = withHelp(button('⇋ 左右対称', () => runAction('symmetry-toggle'), { cls: 'symbtn' }), 'top:symmetry');
   const viewMenu = h('div', { class: 'popover' });
   const viewBtn = withHelp(button('表示 ▾', () => viewMenu.classList.toggle('open')), 'top:view');
   const docName = h('span', { class: 'docname' });
@@ -47,6 +48,7 @@ export function buildApp(root: HTMLElement): void {
     docName,
     modeTabs,
     h('div', { class: 'spacer' }),
+    symBtn,
     undoBtn,
     redoBtn,
     h('div', { class: 'popwrap' }, viewBtn, viewMenu),
@@ -164,6 +166,9 @@ export function buildApp(root: HTMLElement): void {
       (Object.keys(MODE_LABEL) as Mode[]).forEach((m, i) =>
         modeTabs.append(withHelp(button(MODE_LABEL[m], () => setMode(m), { active: state.mode === m, title: `Shift+${i + 1}` }), `mode:${m}`)),
       );
+      symBtn.classList.toggle('active', state.symmetryX);
+      symBtn.disabled = state.mode === 'anim';
+      symBtn.title = state.mode === 'anim' ? 'アニメでは左右別々に動かすので使いません' : '左右対称モード';
       undoBtn.disabled = !canUndo();
       redoBtn.disabled = !canRedo();
       docName.textContent = state.doc.name + (isDirty() ? ' ●' : '');
@@ -198,7 +203,7 @@ export function buildApp(root: HTMLElement): void {
       const s = docStats(state.doc);
       const o = activeObject();
       const tool = TOOLS[state.mode].find((t) => t[0] === state.tool[state.mode]);
-      const flags = [state.snap ? '吸着' : '', state.symmetryX ? 'X対称' : '', `軸:${'XYZ'[state.axis]}`].filter(Boolean).join(' ');
+      const flags = [state.snap ? '吸着' : '', state.symmetryX && state.mode !== 'anim' ? '左右対称' : '', `軸:${'XYZ'[state.axis]}`].filter(Boolean).join(' ');
       status.textContent = `ボタンは長押しで説明　|　${tool ? `${tool[1]} — ${tool[2]}` : ''}　|　${o ? `${o.name} 選択 ${selVerts(o, state.sel).size}頂点` : ''}　|　全体 ${s.verts}頂点 ${s.tris}三角形　|　${flags}${pencilSettings.fingerEdit ? '　|　指で編集' : ''}`;
     });
   };

@@ -162,7 +162,7 @@ function modelPanel(root: HTMLElement): void {
         h('span', { class: 'lbl' }, '刻み'),
         numberInput(state.gridStep, (v) => ((state.gridStep = Math.max(0.001, v)), notify('ui')), { step: 0.01, min: 0.001, width: '5em' }),
       ),
-      row(withHelp(checkbox('X対称に編集', state.symmetryX, (v) => ((state.symmetryX = v), notify('ui')), '左右対称のモデルを片側だけ動かす'), 'panel:symmetry')),
+      row(withHelp(checkbox('左右対称モード', state.symmetryX, (v) => ((state.symmetryX = v), notify('ui', 'view')), '片側の操作が反対側にも効く'), 'panel:symmetry')),
       grid(act('snap-grid', '頂点をグリッドへ')),
     ),
     paletteSection(),

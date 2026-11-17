@@ -17,6 +17,7 @@ import { Viewport, type Ray } from './viewport';
 import { drawGizmo, GizmoDrag, hitGizmo, type Handle } from './gizmo';
 import { beginUndoableSession, endUndoableSession } from './transform';
 import { toast, capture } from '../ui/dom';
+import { symmetryMap, mirrorSelection, mirrorBone, mirrorV, pairBoneBase, SYM_EPS } from '../core/symmetry';
 
 type Nav = 'orbit' | 'pan' | 'zoom';
 interface Drag {
@@ -32,6 +33,7 @@ interface Drag {
   session?: ReturnType<typeof beginUndoableSession>;
   /** テクスチャ描画: 直前のピクセル */
   last?: { tex: number; x: number; y: number } | null;
+  lastM?: { tex: number; x: number; y: number } | null;
   /** このストロークで書き換え用に複製済みのテクスチャ */
   begun?: Set<number>;
   shapeStart?: { tex: number; x: number; y: number; snapshot: Uint8ClampedArray } | null;
@@ -339,12 +341,17 @@ export class Controls {
     if (!o) return;
     if (state.sel.mode !== selMode) ops.convertSelection(o, state.sel, selMode);
     const sel = state.sel;
+    // 左右対称モードでは、反対側の同じ要素も一緒に選ぶ／外す
+    const sym = this.symOn() ? symmetryMap(o) : null;
+    const mirrorOf = (item: unknown): unknown =>
+      !sym ? undefined : selMode === 'face' ? sym.face(item as number) : selMode === 'vert' ? sym.vert(item as number) : sym.edge(item as string);
     const apply = <T>(set: Set<T>, item: T | null) => {
       if (op === 'set') set.clear();
       if (item === null) return;
-      if (op === 'sub') set.delete(item);
-      else if (op === 'add' && set.has(item)) set.delete(item);
-      else set.add(item);
+      const m = mirrorOf(item) as T | undefined;
+      const items = m !== undefined && m !== item ? [item, m] : [item];
+      const removing = op === 'sub' || (op === 'add' && set.has(item));
+      for (const it of items) removing ? set.delete(it) : set.add(it);
     };
     if (selMode === 'face') {
       const hit = this.vp.raycast(ray, state.activeObj);
@@ -438,7 +445,30 @@ export class Controls {
             return vis(ops.faceCenter(o, f)) || f.v.some(isVis);
           }),
       );
+    if (this.symOn()) {
+      if (op === 'sub') {
+        // 外した要素の反対側も外す: 反対側の集合を作り直して差し引く
+        const keep = { ...sel, verts: new Set(sel.verts), edges: new Set(sel.edges), faces: new Set(sel.faces) };
+        const tmp = { mode: sel.mode, verts: new Set<number>(), edges: new Set<string>(), faces: new Set<number>() };
+        const s = symmetryMap(o);
+        for (const v of keep.verts) if (s.vert(v) !== undefined && !keep.verts.has(s.vert(v)!)) tmp.verts.add(v);
+        for (const k of keep.edges) if (s.edge(k) && !keep.edges.has(s.edge(k)!)) tmp.edges.add(k);
+        for (const f of keep.faces) if (s.face(f) !== undefined && !keep.faces.has(s.face(f)!)) tmp.faces.add(f);
+        for (const v of tmp.verts) sel.verts.delete(v);
+        for (const k of tmp.edges) sel.edges.delete(k);
+        for (const f of tmp.faces) sel.faces.delete(f);
+      } else mirrorSelection(o, sel);
+    }
     notify('sel', 'ui');
+  }
+
+  /** 左右対称が効く場面か（アニメのポーズは左右別々に動かすので対象外） */
+  private symOn(): boolean {
+    return state.symmetryX && state.mode !== 'anim';
+  }
+
+  private mirrorRay(r: Ray): Ray {
+    return { o: mirrorV(r.o), d: mirrorV(r.d) };
   }
 
   // ---------------- リグ・アニメ ----------------
@@ -517,9 +547,25 @@ export class Controls {
       p = add(ray.o, mul(ray.d, t));
     }
     if (state.snap) p = p.map((v) => Math.round(v / state.gridStep) * state.gridStep) as V3;
-    if (state.symmetryX && Math.abs(p[0]) < state.gridStep * 0.5) p[0] = 0;
     checkpoint();
-    state.activeBone = addBone(state.doc, state.activeBone, p);
+    const doc = state.doc;
+    if (this.symOn()) {
+      // 中心近くなら中心線上に1本。そうでなければ左右に1本ずつ（名前は .L / .R）
+      if (Math.abs(p[0]) < Math.max(state.gridStep * 0.5, SYM_EPS)) {
+        p[0] = 0;
+        state.activeBone = addBone(doc, state.activeBone, p);
+      } else {
+        const parent = state.activeBone;
+        const mp = parent >= 0 ? mirrorBone(doc, parent) : -1;
+        const base = pairBoneBase(doc);
+        // キャラクターが +Z を向いているとき、+X 側がキャラクターの左（.L）
+        const side = p[0] > 0 ? 'L' : 'R',
+          other = side === 'L' ? 'R' : 'L';
+        const a = addBone(doc, parent, p, `${base}.${side}`);
+        addBone(doc, mp >= 0 ? mp : parent, mirrorV(p), `${base}.${other}`);
+        state.activeBone = a;
+      }
+    } else state.activeBone = addBone(doc, state.activeBone, p);
     notify('doc', 'ui', 'pose');
   }
 
@@ -529,8 +575,17 @@ export class Controls {
     const o = activeObject();
     const d = this.drag;
     if (!o || !d) return;
+    const ray = this.vp.rayAt(x, y);
+    this.vpaintRay(ray);
+    if (this.symOn()) this.vpaintRay(this.mirrorRay(ray));
+  }
+
+  private vpaintRay(ray: Ray): void {
+    const o = activeObject();
+    const d = this.drag;
+    if (!o || !d) return;
     const col = hexToRgb(state.color);
-    const hit = this.vp.raycast(this.vp.rayAt(x, y), state.activeObj);
+    const hit = this.vp.raycast(ray, state.activeObj);
     if (!hit) return;
     const f = o.faces[hit.face];
     if (state.sel.mode === 'vert') {
@@ -552,9 +607,17 @@ export class Controls {
   }
 
   private paintAt(x: number, y: number, first: boolean): void {
+    const ray = this.vp.rayAt(x, y);
+    this.paintRay(ray, first, false);
+    const tool = state.tool.texture;
+    // 直線・矩形は描き直しのたびに元画像へ戻すので、鏡写しは扱わない
+    if (this.symOn() && !actx.held.has('hold-picker') && tool !== 'picker' && tool !== 'line' && tool !== 'rect') this.paintRay(this.mirrorRay(ray), first, true);
+  }
+
+  private paintRay(ray: Ray, first: boolean, mirrored: boolean): void {
     const d = this.drag;
     if (!d) return;
-    const hit = this.vp.raycast(this.vp.rayAt(x, y));
+    const hit = this.vp.raycast(ray);
     if (!hit) return;
     const o = state.doc.objects[hit.obj];
     if (o.tex < 0 || !state.doc.textures[o.tex]) {
@@ -596,12 +659,13 @@ export class Controls {
         d.changed = true;
       }
     } else {
-      const last = d.last;
+      const last = mirrored ? d.lastM : d.last;
       // 同じテクスチャ上で近ければ線でつなぐ（UVの継ぎ目を飛び越える時はつながない）
       if (last && last.tex === o.tex && Math.abs(last.x - px) + Math.abs(last.y - py) <= Math.max(8, tex.w / 8)) drawLine(tex, last.x, last.y, px, py, state.brushSize, c);
       else stamp(tex, px, py, state.brushSize, c);
       d.changed = true;
-      d.last = { tex: o.tex, x: px, y: py };
+      if (mirrored) d.lastM = { tex: o.tex, x: px, y: py };
+      else d.last = { tex: o.tex, x: px, y: py };
     }
     notify('tex');
   }
@@ -614,7 +678,56 @@ export class Controls {
 
   // ---------------- オーバーレイ ----------------
 
+  /** 左右対称モードの鏡の面（X=0）を薄く表示 */
+  private drawSymmetryPlane(c: CanvasRenderingContext2D): void {
+    let y0 = Infinity,
+      y1 = -Infinity,
+      z0 = Infinity,
+      z1 = -Infinity;
+    for (const o of state.doc.objects)
+      if (o.visible)
+        for (const p of o.verts) {
+          y0 = Math.min(y0, p[1]);
+          y1 = Math.max(y1, p[1]);
+          z0 = Math.min(z0, p[2]);
+          z1 = Math.max(z1, p[2]);
+        }
+    if (!isFinite(y0)) {
+      y0 = 0;
+      y1 = 1;
+      z0 = -0.5;
+      z1 = 0.5;
+    }
+    const m = Math.max(0.1, (y1 - y0) * 0.12);
+    const pts = (
+      [
+        [0, y0 - m, z0 - m],
+        [0, y1 + m, z0 - m],
+        [0, y1 + m, z1 + m],
+        [0, y0 - m, z1 + m],
+      ] as V3[]
+    ).map((p) => this.vp.project(p));
+    if (pts.some((p) => p.z <= 0)) return;
+    c.save();
+    c.beginPath();
+    pts.forEach((p, i) => (i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y)));
+    c.closePath();
+    c.fillStyle = 'rgba(255, 90, 200, 0.07)';
+    c.fill();
+    c.setLineDash([6, 5]);
+    c.strokeStyle = 'rgba(255, 110, 210, 0.7)';
+    c.lineWidth = 1.5;
+    c.stroke();
+    c.setLineDash([]);
+    const top = pts[1].y < pts[2].y ? pts[1] : pts[2];
+    c.font = '600 11px system-ui, sans-serif';
+    c.fillStyle = 'rgba(255, 140, 220, 0.95)';
+    c.fillText('左右対称', top.x + 4, top.y - 4);
+    c.restore();
+  }
+
   private drawOverlay(c: CanvasRenderingContext2D): void {
+    if (this.symOn()) this.drawSymmetryPlane(c);
     drawGizmo(this.vp, c, this.hover, null);
     if (this.box) {
       const b = this.box;

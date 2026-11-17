@@ -760,3 +760,9 @@ textarea {
 [data-help] {
   -webkit-touch-callout: none;
 }
+
+.symbtn.active {
+  background: #ff6ec7;
+  border-color: #ff6ec7;
+  color: #2a0820;
+}

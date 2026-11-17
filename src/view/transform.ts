@@ -2,7 +2,8 @@
 // 移動・回転・拡縮を適用する共通の窓口。ギズモ操作とキー操作（TourBoxのダイヤル等）の両方から使う。
 import type { Quat, V3 } from '../core/types';
 import { state, activeObject, activeClip, currentPose, checkpoint, dropCheckpoint, notify } from '../state';
-import { selVerts, mirrorPartners } from '../core/mesh-ops';
+import { selVerts } from '../core/mesh-ops';
+import { symmetricMover, mirrorBone, mirrorV, SYM_EPS } from '../core/symmetry';
 import { moveBoneRest, restWorld, worldMatrices, setKey, newClip } from '../core/skeleton';
 import { add, centroid, dot, mDecompose, mIdent, mInvert, mPoint, mPos, mul, qConj, qFromAxisAngle, qMul, qNorm, qRotate, sub, mDir, norm } from '../core/vec';
 
@@ -65,18 +66,10 @@ function meshSession(info: { pivot: V3; axes: Axes; can: Session['can'] }): Sess
   const o = activeObject()!;
   const vs = [...selVerts(o, state.sel)];
   const orig = new Map<number, V3>(vs.map((v) => [v, [...o.verts[v]] as V3]));
-  const partners = state.symmetryX ? mirrorPartners(o) : null;
-  const selected = new Set(vs);
+  const mover = state.symmetryX ? symmetricMover(o, vs) : null;
   const apply = (fn: (p: V3) => V3) => {
-    for (const v of vs) {
-      let p = fn(orig.get(v)!);
-      if (partners) {
-        const m = partners.get(v);
-        if (m === v) p = [0, p[1], p[2]]; // 対称面上の頂点は面から離さない
-        else if (m !== undefined && !selected.has(m)) o.verts[m] = [-p[0], p[1], p[2]];
-      }
-      o.verts[v] = p;
-    }
+    if (mover) mover(fn);
+    else for (const v of vs) o.verts[v] = fn(orig.get(v)!);
     notify('doc');
   };
   const { pivot, axes } = info;
@@ -109,11 +102,17 @@ function rigSession(info: { pivot: V3; axes: Axes; can: Session['can'] }): Sessi
   const p0 = info.pivot;
   // ドラッグ中は毎回「開始時の骨格」から計算し直す
   const snapshot = structuredClone(state.doc.bones);
+  // 左右対称: 反対側のボーンも鏡写しで動かす。中心のボーンは中心から離さない
+  const partner = state.symmetryX ? mirrorBone(state.doc, bi) : -1;
+  const centered = state.symmetryX && partner < 0 && Math.abs(p0[0]) < SYM_EPS * 10;
   return {
     ...info,
     translate: (d) => {
       state.doc.bones = structuredClone(snapshot);
-      moveBoneRest(state.doc, bi, add(p0, snapV(d)), state.keepChildren);
+      let p = add(p0, snapV(d));
+      if (centered) p = [0, p[1], p[2]];
+      moveBoneRest(state.doc, bi, p, state.keepChildren);
+      if (partner >= 0 && partner !== bi) moveBoneRest(state.doc, partner, mirrorV(p), state.keepChildren);
       notify('doc');
     },
     rotate: () => {},
