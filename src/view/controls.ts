@@ -329,7 +329,8 @@ export class Controls {
 
   private visibleFilter(oi: number): (p: V3) => boolean {
     if (state.view.xray) return () => true;
-    return (p) => this.vp.isVisible(p, oi);
+    // 面を一度だけ投影しておく方式（大きなモデルでも固まらない）
+    return this.vp.visibilityTester(oi);
   }
 
   private tapSelect(x: number, y: number, op: 'set' | 'add' | 'sub'): void {

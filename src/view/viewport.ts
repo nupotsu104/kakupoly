@@ -491,6 +491,61 @@ export class Viewport {
     return best;
   }
 
+  /**
+   * 「見えているか」を何度も調べる時用（範囲選択など）。面を一度だけ画面に投影して升目に振り分けておき、
+   * 各点はその升目の面とだけ比べる。大きなモデルで点ごとにレイを飛ばすと固まるため。
+   */
+  visibilityTester(only = -1, positions?: (oi: number) => V3[]): (p: V3) => boolean {
+    const CELL = 32;
+    const cols = Math.ceil(this.w / CELL) + 1,
+      rows = Math.ceil(this.h / CELL) + 1;
+    const bins: number[][] = Array.from({ length: cols * rows }, () => []);
+    // 三角形ごとに [x0,y0,z0, x1,y1,z1, x2,y2,z2]
+    const tris: number[] = [];
+    state.doc.objects.forEach((o, oi) => {
+      if (!o.visible || (only >= 0 && oi !== only)) return;
+      const P = positions ? positions(oi) : o.verts;
+      const sp = P.map((p) => this.project(p));
+      for (const f of o.faces)
+        for (let k = 1; k < f.v.length - 1; k++) {
+          const a = sp[f.v[0]],
+            b = sp[f.v[k]],
+            c = sp[f.v[k + 1]];
+          if (a.z <= 0 || b.z <= 0 || c.z <= 0) continue;
+          const id = tris.length / 9;
+          tris.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+          const x0 = Math.max(0, Math.floor(Math.min(a.x, b.x, c.x) / CELL)),
+            x1 = Math.min(cols - 1, Math.floor(Math.max(a.x, b.x, c.x) / CELL));
+          const y0 = Math.max(0, Math.floor(Math.min(a.y, b.y, c.y) / CELL)),
+            y1 = Math.min(rows - 1, Math.floor(Math.max(a.y, b.y, c.y) / CELL));
+          for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) bins[y * cols + x].push(id);
+        }
+    });
+    return (p: V3) => {
+      const s = this.project(p);
+      if (s.z <= 0) return false;
+      const cx = Math.floor(s.x / CELL),
+        cy = Math.floor(s.y / CELL);
+      if (cx < 0 || cy < 0 || cx >= cols || cy >= rows) return true;
+      for (const id of bins[cy * cols + cx]) {
+        const t = id * 9;
+        const ax = tris[t], ay = tris[t + 1], az = tris[t + 2];
+        const bx = tris[t + 3], by = tris[t + 4], bz = tris[t + 5];
+        const qx = tris[t + 6], qy = tris[t + 7], qz = tris[t + 8];
+        const det = (by - qy) * (ax - qx) + (qx - bx) * (ay - qy);
+        if (Math.abs(det) < 1e-9) continue;
+        const w0 = ((by - qy) * (s.x - qx) + (qx - bx) * (s.y - qy)) / det;
+        const w1 = ((qy - ay) * (s.x - qx) + (ax - qx) * (s.y - qy)) / det;
+        const w2 = 1 - w0 - w1;
+        if (w0 < -1e-4 || w1 < -1e-4 || w2 < -1e-4) continue;
+        // 画面上で直線補間できるのは 1/奥行き
+        const z = 1 / (w0 / az + w1 / bz + w2 / qz);
+        if (z < s.z - Math.max(1e-4, s.z * 2e-3)) return false;
+      }
+      return true;
+    };
+  }
+
   /** 点 p が（アクティブオブジェクトの面に）隠されずに見えているか */
   isVisible(p: V3, only = -1): boolean {
     const s = this.project(p);

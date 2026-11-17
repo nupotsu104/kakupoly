@@ -8,6 +8,7 @@ import { newDoc, newTexture } from '../core/doc';
 import { resizeTexture } from '../core/paint';
 import { loadImageFile, importFiles, DEFAULT_IMPORT, type ImportOptions } from '../io/import';
 import { inspectModelFile } from '../io/inspect';
+import { simplifyDoc, triCount } from '../core/simplify';
 import { exportGLB, exportOBJ } from '../io/gltf-export';
 import { encodePNG } from '../io/png';
 import { serialize, deserialize, storage, requestPersistence } from '../io/project';
@@ -299,6 +300,60 @@ async function showImportError(files: File[], e: unknown): Promise<void> {
   modal('読み込めませんでした', body, { wide: true });
 }
 
+/** ポリゴンを減らすダイアログ */
+export function openSimplify(): void {
+  const objs = state.doc.objects;
+  const total = objs.reduce((t, o) => t + triCount(o), 0);
+  const active = objs[state.activeObj];
+  const opt = { target: Math.min(2000, Math.max(12, Math.round(total / 2))), scope: 'all' as 'all' | 'active' };
+  const info = h('p', { class: 'hint' });
+  const updateInfo = () => {
+    const now = opt.scope === 'all' ? total : active ? triCount(active) : 0;
+    info.textContent = `今: ${now.toLocaleString()} 三角形 → 目標: ${opt.target.toLocaleString()} 三角形（ボーンの割り当てとUVは残ります。取り消しで元に戻せます）`;
+  };
+  const body = h(
+    'div',
+    { class: 'form' },
+    h('label', {}, '対象', select(opt.scope, [['all', `全部（${objs.length}個）`], ['active', `選択中のオブジェクト（${active?.name ?? 'なし'}）`]], (v) => ((opt.scope = v), updateInfo()))),
+    h(
+      'label',
+      {},
+      '目標の三角形数',
+      select(
+        String(opt.target),
+        [...new Set([opt.target, 20000, 10000, 5000, 3000, 2000, 1000, 500, 300])]
+          .filter((n) => n < total || n === opt.target)
+          .sort((a, b) => b - a)
+          .map((n): [string, string] => [String(n), n.toLocaleString()]),
+        (v) => ((opt.target = Number(v)), updateInfo()),
+      ),
+    ),
+    info,
+    h('p', { class: 'hint' }, 'PS1風なら、キャラクター1体で 1,000〜2,000 くらいが目安です。元のまま残したい場合は、先に「ファイル」→「別名で保存」しておくと安心です。'),
+    h(
+      'div',
+      { class: 'actions' },
+      button(
+        '減らす',
+        async () => {
+          checkpoint();
+          toast('ポリゴンを減らしています…', 10000);
+          const r = await simplifyDoc(state.doc, opt.target, opt.scope === 'active' ? [state.activeObj] : undefined);
+          state.sel.verts.clear();
+          state.sel.edges.clear();
+          state.sel.faces.clear();
+          notify('doc', 'sel', 'ui');
+          toast(`${r.before.toLocaleString()} → ${r.after.toLocaleString()} 三角形にしました`, 4000);
+          m.close();
+        },
+        { cls: 'primary' },
+      ),
+    ),
+  );
+  updateInfo();
+  const m = modal('ポリゴンを減らす', body);
+}
+
 async function openKpoly(close: () => void): Promise<void> {
   const [f] = await pickFile('.kpoly,application/json');
   if (!f) return;
@@ -319,6 +374,22 @@ function importOptionsForm(): HTMLElement {
   return h(
     'div',
     { class: 'form inline' },
+    h(
+      'label',
+      {},
+      'ポリゴン数',
+      select(
+        String(importOpts.targetTris),
+        [
+          ['0', 'そのまま（元のまま）'],
+          ['20000', '2万三角形まで減らす'],
+          ['5000', '5000まで減らす'],
+          ['2000', '2000まで減らす（PS1風）'],
+          ['1000', '1000まで減らす（PS1風・粗め）'],
+        ],
+        (v) => (importOpts.targetTris = Number(v)),
+      ),
+    ),
     checkbox('三角形→四角形', importOpts.quads, (v) => (importOpts.quads = v)),
     checkbox('重なった頂点を溶接', importOpts.weld, (v) => (importOpts.weld = v)),
     h('label', {}, '画像の最大', select(String(importOpts.maxTex), [['128', '128'], ['256', '256'], ['512', '512'], ['0', '縮めない']], (v) => (importOpts.maxTex = Number(v)))),
@@ -358,7 +429,7 @@ async function doImport(append: boolean, close: () => void): Promise<void> {
     actx.vp?.frame();
     const tris = d.objects.reduce((s, o) => s + o.faces.reduce((t, f) => t + f.v.length - 2, 0), 0);
     toast(`読み込みました: ${d.objects.length}個・${tris}三角形・ボーン${d.bones.length}本・アニメ${d.clips.length}個`, 4000);
-    if (tris > 3000) setTimeout(() => toast('ポリゴンがPS1の1キャラとしては多めです（当時は数百〜千数百程度が目安）', 5000), 4200);
+    if (tris > 20000) setTimeout(() => toast('重いモデルです。PS1風にするなら、右パネルの「ポリゴンを減らす」で軽くできます', 6000), 4200);
   } catch (e) {
     console.error(e);
     document.getElementById('toast')?.classList.remove('show');

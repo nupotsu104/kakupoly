@@ -112,8 +112,20 @@ export function buildApp(root: HTMLElement): void {
       (v as unknown as Record<string, unknown>)[k] = val;
       notify('view', 'ui');
     };
+    const preset = (ps1: boolean) => () => {
+      Object.assign(v, ps1 ? { res: 240, jitter: true, affine: true, dither: true, shade: 'flat' } : { res: 0, jitter: false, affine: false, dither: false, shade: 'smooth' });
+      notify('view', 'ui');
+    };
+    const isPs1 = v.res > 0 && v.jitter && v.affine && v.dither;
+    const isOrig = v.res === 0 && !v.jitter && !v.affine && !v.dither;
     viewMenu.append(
-      h('b', {}, 'PS1表示'),
+      h(
+        'div',
+        { class: 'seg' },
+        withHelp(button('PS1風', preset(true), { active: isPs1 }), 'top:view-ps1'),
+        withHelp(button('そのまま', preset(false), { active: isOrig }), 'top:view-original'),
+      ),
+      h('b', {}, 'PS1表示（細かく）'),
       h('label', {}, '解像度 ', select(String(v.res), [['0', 'iPadのまま'], ['240', '240ライン（PS1相当）'], ['480', '480ライン'], ['120', '120ライン（極端）']], (x) => set('res')(Number(x)))),
       checkbox('頂点のガタつき', v.jitter, set('jitter'), '頂点を画面のピクセルに吸着（PS1は頂点座標が整数）'),
       checkbox('テクスチャのゆがみ', v.affine, set('affine'), '遠近補正なしのテクスチャ貼り'),

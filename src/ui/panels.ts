@@ -8,7 +8,7 @@ import { selVerts, selFaces, joinObjects } from '../core/mesh-ops';
 import { reparentBone, newClip } from '../core/skeleton';
 import { resizeTexture } from '../core/paint';
 import { boneColor } from '../view/builders';
-import { openImageImport, openTextureResize } from './dialogs';
+import { openImageImport, openTextureResize, openSimplify } from './dialogs';
 import { withHelp } from './longpress';
 
 /** 操作ボタン（ショートカットがあれば併記） */
@@ -486,6 +486,7 @@ function objectsSection(): HTMLElement {
         o.doubleSided = !o.doubleSided;
         notify('doc', 'ui');
       }),
+      withHelp(button('ポリゴンを減らす', () => openSimplify()), 'panel:simplify'),
       act('join-all', '全部を1つに結合'),
       act('center-x', '中心に移動'),
       button('下と結合', () => {

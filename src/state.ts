@@ -121,12 +121,33 @@ const takeSnap = (): Snap => ({
 const undoStack: Snap[] = [];
 const redoStack: Snap[] = [];
 const MAX_HISTORY = 80;
+/** 取り消し用の写しの合計の大きさ（頂点数＋面の角の数）の上限。大きなモデルで iPad のメモリがあふれないように */
+const HISTORY_BUDGET = 4_000_000;
+const MIN_HISTORY = 5;
+
+/** 写しの大きさの目安 */
+export function docWeight(doc: Doc): number {
+  let n = doc.bones.length;
+  for (const o of doc.objects) {
+    n += o.verts.length;
+    for (const f of o.faces) n += f.v.length;
+  }
+  for (const c of doc.clips) for (const t of c.tracks) n += t.keys.length;
+  return n;
+}
+
+function trimHistory(): void {
+  let total = undoStack.reduce((t, s) => t + docWeight(s.doc), 0);
+  while (undoStack.length > MIN_HISTORY && (undoStack.length > MAX_HISTORY || total > HISTORY_BUDGET)) {
+    total -= docWeight(undoStack.shift()!.doc);
+  }
+}
 let dirtyCounter = 0;
 
 /** 変更を加える「前」に呼ぶ */
 export function checkpoint(): void {
   undoStack.push(takeSnap());
-  if (undoStack.length > MAX_HISTORY) undoStack.shift();
+  trimHistory();
   redoStack.length = 0;
   dirtyCounter++;
 }

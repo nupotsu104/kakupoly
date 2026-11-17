@@ -50,7 +50,7 @@ describe('GLB 書き出し', () => {
     const glb = await exportGLB(doc);
     const g = await new GLTFLoader().parseAsync(glb.buffer as ArrayBuffer, '');
     restoreGltfNames(g as never);
-    const back = await sceneToDoc(g.scene, g.animations, { quads: true, weld: true, maxTex: 0, fps: 15 });
+    const back = await sceneToDoc(g.scene, g.animations, { quads: true, weld: true, maxTex: 0, fps: 15, targetTris: 0 });
     expect(back.bones.map((b) => b.name)).toEqual(doc.bones.map((b) => b.name));
     // 髪のトゲの根元は頭の上面と同じ位置・同じボーンなので、読み込み時の溶接で8頂点まとまる
     expect(back.objects[0].verts.length).toBe(doc.objects[0].verts.length - 8);

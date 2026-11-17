@@ -12,6 +12,7 @@ import type { Doc, Face, MeshObj, V2, V3, Bone, Influence, Texture } from '../co
 import { newDoc } from '../core/doc';
 import { weldByDistance } from '../core/mesh-ops';
 import { trisToQuads } from '../core/cleanup';
+import { simplifyDoc } from '../core/simplify';
 import { mDecompose, mInvert, mMul, type M4 } from '../core/vec';
 import { newClip, setKey, reduceKeys } from '../core/skeleton';
 
@@ -21,9 +22,11 @@ export interface ImportOptions {
   /** テクスチャの最大辺。大きい画像はこのサイズまで縮める（0=そのまま） */
   maxTex: number;
   fps: number;
+  /** 読み込み後に全体をこの三角形数まで減らす（0 = 元のまま） */
+  targetTris: number;
 }
 
-export const DEFAULT_IMPORT: ImportOptions = { quads: true, weld: true, maxTex: 256, fps: 15 };
+export const DEFAULT_IMPORT: ImportOptions = { quads: true, weld: true, maxTex: 256, fps: 15, targetTris: 0 };
 
 /** 複数ファイル（OBJ + MTL + 画像 など）を受け取り、名前で相互参照できるようにする */
 function makeManager(files: File[]): { manager: THREE.LoadingManager; revoke: () => void } {
@@ -77,6 +80,7 @@ export async function importFiles(files: File[], opts: ImportOptions = DEFAULT_I
     await waitForTextures(root);
     const doc = await sceneToDoc(root, clips, opts);
     doc.name = main.name.replace(/\.[^.]+$/, '');
+    if (opts.targetTris > 0) await simplifyDoc(doc, opts.targetTris);
     return doc;
   } finally {
     setTimeout(revoke, 5000);
@@ -207,10 +211,24 @@ export async function sceneToDoc(root: THREE.Object3D, clips: THREE.AnimationCli
     const sw = geo.getAttribute('skinWeight');
     const sm = mesh as THREE.SkinnedMesh;
     const isSkinned = !!sm.isSkinnedMesh && !!si && !!sw;
-    const mat = isSkinned ? sm.bindMatrix : mesh.matrixWorld;
+    // スキンなしでも、親（祖先）にボーンがあれば、そのボーンに100%くっつける（3ds Max 等の「骨にリンクした部品」）。
+    // 位置は「今のボーンの姿勢」から「バインド姿勢」へ置き直す
+    let attachBone = -1;
+    let mat = isSkinned ? sm.bindMatrix : mesh.matrixWorld;
+    if (!isSkinned) {
+      for (let p = mesh.parent; p; p = p.parent)
+        if (boneIndex.has(p)) {
+          attachBone = boneIndex.get(p)!;
+          mat = restWorldOf.get(p)!.clone().multiply(p.matrixWorld.clone().invert()).multiply(mesh.matrixWorld);
+          break;
+        }
+    }
     const flip = mat.determinant() < 0;
     const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-    const groups = geo.groups.length ? geo.groups : [{ start: 0, count: geo.index ? geo.index.count : pos.count, materialIndex: 0 }];
+    // 材質が1つなら区分け（グループ）は無視して1つのオブジェクトにする。複数なら材質ごとに分ける
+    const whole = [{ start: 0, count: geo.index ? geo.index.count : pos.count, materialIndex: 0 }];
+    let groups = Array.isArray(mesh.material) && geo.groups.length ? geo.groups : whole;
+    if (Array.isArray(mesh.material) && new Set(groups.map((g) => mats[g.materialIndex ?? 0])).size === 1) groups = whole;
     const index = geo.index;
     const v = new THREE.Vector3();
     groups.forEach((g, gi) => {
@@ -235,7 +253,8 @@ export async function sceneToDoc(root: THREE.Object3D, clips: THREE.AnimationCli
         r = o.verts.length;
         o.verts.push([v.x, v.y, v.z]);
         const inf: Influence[] = [];
-        if (isSkinned) {
+        if (attachBone >= 0) inf.push([attachBone, 1]);
+        else if (isSkinned) {
           for (let k = 0; k < 4; k++) {
             const w = sw.getComponent(i, k);
             const b = sm.skeleton.bones[si.getComponent(i, k)];
