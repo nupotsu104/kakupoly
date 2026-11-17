@@ -505,7 +505,7 @@ async function doImport(append: boolean, close: () => void): Promise<void> {
 }
 
 function exportForm(): HTMLElement {
-  const o = { scale: 1, flat: true, anim: true };
+  const o = { scale: 1, flat: true, anim: true, smoothTex: state.view.smoothTex };
   return h(
     'div',
     {},
@@ -513,6 +513,7 @@ function exportForm(): HTMLElement {
       'div',
       { class: 'form inline' },
       checkbox('カクカク陰影（面ごとの法線）', o.flat, (v) => (o.flat = v)),
+      checkbox('テクスチャをなめらかに', o.smoothTex, (v) => (o.smoothTex = v), 'オフならドットのまま（PS1風）。大きな絵を元の見た目で使うときはオン'),
       checkbox('アニメも含める', o.anim, (v) => (o.anim = v)),
       h('label', {}, '倍率', numberInput(o.scale, (v) => (o.scale = v), { step: 0.01, width: '5em' })),
     ),
@@ -522,7 +523,7 @@ function exportForm(): HTMLElement {
       button(
         'GLB（ボーン・アニメ込み）',
         async () => {
-          const b = await exportGLB(state.doc, { scale: o.scale, flat: o.flat, animations: o.anim });
+          const b = await exportGLB(state.doc, { scale: o.scale, flat: o.flat, animations: o.anim, smoothTex: o.smoothTex });
           downloadBlob(new Blob([b as BlobPart], { type: 'model/gltf-binary' }), `${safe(state.doc.name)}.glb`);
         },
         { cls: 'primary' },

@@ -7,6 +7,8 @@ import { mInvert } from '../core/vec';
 import { encodePNG } from './png';
 
 const NEAREST = 9728;
+const LINEAR = 9729;
+const LINEAR_MIPMAP_LINEAR = 9987;
 const REPEAT = 10497;
 const FLOAT = 5126;
 const USHORT = 5123;
@@ -29,6 +31,8 @@ export interface ExportOptions {
   scale?: number;
   /** 面の法線をそのまま使う（PS1風のカクカク陰影）。false なら頂点ごとに平均 */
   flat?: boolean;
+  /** テクスチャをなめらかに補間する（元の見た目向け）。false ならドットのまま（最近傍、PS1風） */
+  smoothTex?: boolean;
   /** アニメーションを含める */
   animations?: boolean;
   /** 見えないオブジェクトも含める */
@@ -241,7 +245,7 @@ export async function exportGLB(doc: Doc, opts: ExportOptions = {}): Promise<Uin
     buffers: [{ byteLength: binData.byteLength }],
   };
   if (textures.length) {
-    json.samplers = [{ magFilter: NEAREST, minFilter: NEAREST, wrapS: REPEAT, wrapT: REPEAT }];
+    json.samplers = [opts.smoothTex ? { magFilter: LINEAR, minFilter: LINEAR_MIPMAP_LINEAR, wrapS: REPEAT, wrapT: REPEAT } : { magFilter: NEAREST, minFilter: NEAREST, wrapS: REPEAT, wrapT: REPEAT }];
     json.textures = textures;
     json.images = images;
   }
