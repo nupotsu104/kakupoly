@@ -214,8 +214,8 @@ export function bindingsFor(action: string): Binding[] {
 }
 
 // ---------- Apple Pencil のダブルタップ・スクイーズ ----------
-// Webページ（Safari）にはこの2つのイベントが届かない。ネイティブの包み（ios/ フォルダのアプリ）から
-// window.kakupoly.pencil('doubleTap' | 'squeeze') が呼ばれたときにここで設定した操作を実行する。
+// Webページ（Safari）にはこの2つのイベントが届かない。ネイティブアプリとして包んだ場合に、
+// 包み側から window.kakupoly.pencil('doubleTap' | 'squeeze') を呼べば、ここで設定した操作が実行される。
 export const pencilSettings: { doubleTap: string; squeeze: string; fingerEdit: boolean } = (() => {
   const d = { doubleTap: 'swap-eraser', squeeze: 'tool-last', fingerEdit: false };
   try {

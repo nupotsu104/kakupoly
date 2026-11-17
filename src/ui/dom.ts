@@ -80,10 +80,19 @@ export function toast(msg: string, ms = 2200): void {
 
 /** モーダルダイアログ。close() を呼ぶと閉じる */
 export function modal(title: string, body: HTMLElement, opts: { wide?: boolean; onClose?: () => void } = {}): { close: () => void; root: HTMLElement } {
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && document.body.lastElementChild === root) {
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      close();
+    }
+  };
   const close = () => {
     root.remove();
+    window.removeEventListener('keydown', onKey, true);
     opts.onClose?.();
   };
+  window.addEventListener('keydown', onKey, true);
   const root = h(
     'div',
     { class: 'modal-back', onpointerdown: (e: Event) => e.target === root && close() },
@@ -125,4 +134,13 @@ export async function downloadBlob(blob: Blob, name: string): Promise<void> {
     URL.revokeObjectURL(url);
     a.remove();
   }, 2000);
+}
+
+/** ポインタの捕捉（指が既に離れている等で失敗しても処理は続ける） */
+export function capture(el: Element, id: number): void {
+  try {
+    el.setPointerCapture(id);
+  } catch {
+    /* noop */
+  }
 }

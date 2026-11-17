@@ -45,6 +45,7 @@ export async function importFiles(files: File[], opts: ImportOptions = DEFAULT_I
       const loader = new GLTFLoader(manager);
       const data = ext === 'glb' ? await main.arrayBuffer() : await main.text();
       const g = await loader.parseAsync(data, '');
+      restoreGltfNames(g);
       root = g.scene;
       clips = g.animations;
     } else if (ext === 'fbx') {
@@ -109,6 +110,21 @@ function imageToRGBA(img: CanvasImageSource & { width: number; height: number },
   return { w, h, data: g.getImageData(0, 0, w, h).data };
 }
 
+/**
+ * three.js の glTF 読み込みはノード名の「.」などを取り除く（例: arm.L → armL）。
+ * 左右の対応付けに名前を使うので、元の名前を userData に戻しておく。
+ */
+export function restoreGltfNames(g: { scene: THREE.Object3D; parser: { json: { nodes?: { name?: string }[] }; associations: Map<unknown, { nodes?: number }> } }): void {
+  const nodes = g.parser.json.nodes ?? [];
+  g.scene.traverse((o) => {
+    const a = g.parser.associations.get(o);
+    const n = a?.nodes !== undefined ? nodes[a.nodes]?.name : undefined;
+    if (n) o.userData.originalName = n;
+  });
+}
+
+const nameOf = (o: THREE.Object3D): string => (o.userData.originalName as string | undefined) ?? o.name;
+
 export async function sceneToDoc(root: THREE.Object3D, clips: THREE.AnimationClip[], opts: ImportOptions): Promise<Doc> {
   const doc = newDoc();
   root.updateMatrixWorld(true);
@@ -146,7 +162,7 @@ export async function sceneToDoc(root: THREE.Object3D, clips: THREE.AnimationCli
     const p = boneParent(b);
     const local = p >= 0 ? mMul(mInvert(rw[p]), rw[i]) : rw[i];
     const d = mDecompose(local);
-    return { name: b.name || `bone${i}`, parent: p, pos: d.pos, rot: d.rot, scl: d.scl };
+    return { name: nameOf(b) || `bone${i}`, parent: p, pos: d.pos, rot: d.rot, scl: d.scl };
   });
   // 名前の重複を避ける
   const seen = new Map<string, number>();
@@ -193,7 +209,7 @@ export async function sceneToDoc(root: THREE.Object3D, clips: THREE.AnimationCli
       const material = mats[g.materialIndex ?? 0] as THREE.MeshStandardMaterial | undefined;
       const o: MeshObj = {
         id: doc.nextId++,
-        name: (mesh.name || 'mesh') + (groups.length > 1 ? `.${gi}` : ''),
+        name: (nameOf(mesh) || 'mesh') + (groups.length > 1 ? `.${gi}` : ''),
         verts: [],
         faces: [],
         skin: [],
@@ -235,7 +251,7 @@ export async function sceneToDoc(root: THREE.Object3D, clips: THREE.AnimationCli
         if (new Set(f.v).size === 3) o.faces.push(f);
       }
       if (o.faces.length === 0) return;
-      if (opts.weld) weldByDistance(o, 1e-5);
+      if (opts.weld) weldByDistance(o, 1e-5, undefined, true);
       if (opts.quads) trisToQuads(o);
       doc.objects.push(o);
     });

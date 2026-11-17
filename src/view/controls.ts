@@ -16,7 +16,7 @@ import { add, mul, dot, sub } from '../core/vec';
 import { Viewport, type Ray } from './viewport';
 import { drawGizmo, GizmoDrag, hitGizmo, type Handle } from './gizmo';
 import { beginUndoableSession, endUndoableSession } from './transform';
-import { toast } from '../ui/dom';
+import { toast, capture } from '../ui/dom';
 
 type Nav = 'orbit' | 'pan' | 'zoom';
 interface Drag {
@@ -101,7 +101,7 @@ export class Controls {
     }
     if (this.drag) return;
     if (e.pointerType === 'pen') this.penActiveUntil = performance.now() + 400;
-    this.vp.overlay.setPointerCapture(e.pointerId);
+    capture(this.vp.overlay, e.pointerId);
     const base = { id: e.pointerId, sx: x, sy: y, lx: x, ly: y, moved: false, pointerType: e.pointerType, additive: this.selOp(e) };
     // マウス右・中ボタン、または押しっぱなしキーで視点操作
     const held = this.heldNav();
@@ -258,7 +258,7 @@ export class Controls {
   // ---------------- 指 ----------------
 
   private touchDown(e: PointerEvent, x: number, y: number): void {
-    this.vp.overlay.setPointerCapture(e.pointerId);
+    capture(this.vp.overlay, e.pointerId);
     this.touches.set(e.pointerId, { x, y, sx: x, sy: y, t: performance.now() });
     if (!this.touchGesture) this.touchGesture = { maxTouches: 0, moved: false, start: performance.now(), lastDist: 0, lastMid: [x, y] };
     const g = this.touchGesture;

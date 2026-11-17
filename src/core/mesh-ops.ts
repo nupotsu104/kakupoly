@@ -338,8 +338,16 @@ export function mergeAtCenter(o: MeshObj, sel: Selection): void {
   sel.verts.add(targetNew);
 }
 
-/** 距離 eps 以内の頂点を溶接。対象は only（省略時は全頂点）。溶接した数を返す */
-export function weldByDistance(o: MeshObj, eps: number, only?: Set<number>): number {
+const sameSkin = (a: Influence[] | undefined, b: Influence[] | undefined): boolean => {
+  const x = a ?? [],
+    y = b ?? [];
+  if (x.length !== y.length) return false;
+  const m = new Map(x.map(([bn, w]) => [bn, w]));
+  return y.every(([bn, w]) => m.has(bn) && Math.abs(m.get(bn)! - w) < 1e-3);
+};
+
+/** 距離 eps 以内の頂点を溶接。対象は only（省略時は全頂点）。keepSkin なら割り当てボーンが同じ頂点どうしだけ。溶接した数を返す */
+export function weldByDistance(o: MeshObj, eps: number, only?: Set<number>, keepSkin = false): number {
   const list = only ? [...only] : o.verts.map((_, i) => i);
   const rep = o.verts.map((_, i) => i);
   let merged = 0;
@@ -359,7 +367,7 @@ export function weldByDistance(o: MeshObj, eps: number, only?: Set<number>): num
           const l = grid.get(key(cx + dx, cy + dy, cz + dz));
           if (!l) continue;
           for (const j of l)
-            if (dist(o.verts[j], p) <= eps) {
+            if (dist(o.verts[j], p) <= eps && (!keepSkin || sameSkin(o.skin[i], o.skin[j]))) {
               found = j;
               break;
             }
