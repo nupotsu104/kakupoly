@@ -131,7 +131,7 @@ function modelPanel(root: HTMLElement): void {
   const nv = o ? selVerts(o, state.sel).size : 0;
   const nf = o ? selFaces(o, state.sel).size : 0;
   root.append(
-    section('選択', selModeRow(), selOpRow(), grid(act('sel-all', 'すべて'), act('sel-none', '解除'), act('sel-invert', '反転'), act('sel-linked', 'つながり')), h('p', { class: 'hint' }, `選択中: 頂点 ${nv} / 面 ${nf}`)),
+    section('選択', selModeRow(), selOpRow(), grid(act('sel-all', 'すべて'), act('sel-none', '解除'), act('sel-invert', '反転'), act('sel-linked', 'つながり'), act('sel-linked-uv', 'UVの島')), h('p', { class: 'hint' }, `選択中: 頂点 ${nv} / 面 ${nf}`)),
     section(
       '形を作る',
       grid(
@@ -200,6 +200,13 @@ function texturePanel(root: HTMLElement): void {
         act('new-texture', '新規 64×64'),
         button('画像を読み込む（PS1化）', () => openImageImport()),
         button('大きさを変える', () => t && openTextureResize(t)),
+        button('全部のパーツに使う', () => {
+          if (!t) return;
+          checkpoint();
+          for (const ob of state.doc.objects) ob.tex = state.activeTex;
+          notify('doc', 'ui', 'tex');
+          toast(`${state.doc.objects.length}個のパーツに「${t.name}」を貼りました`);
+        }),
         button('2倍に拡大', () => {
           if (!t) return;
           checkpoint();
@@ -234,7 +241,8 @@ function texturePanel(root: HTMLElement): void {
     paletteSection(),
     section(
       'UV（貼り方）',
-      h('p', { class: 'hint' }, '3Dビューで面を選んでから展開します（選択なしなら全体）。UVツールでテクスチャ画面の網目を直接動かせます。'),
+      h('p', { class: 'hint' }, '3Dビューで面を選んでから展開します（選択なしなら全体）。UVツールでテクスチャ画面の網目を直接動かせます。網目を2回タップすると、その島を丸ごと選べます。'),
+      selOpRow(),
       grid(act('uv-view', '画面から'), act('uv-box', '箱型'), act('uv-x', 'X方向'), act('uv-y', 'Y方向'), act('uv-z', 'Z方向'), act('uv-reset', '各面いっぱい')),
       row(
         checkbox('UVの網目を表示', state.showUV, (v) => ((state.showUV = v), notify('ui'))),
@@ -416,9 +424,35 @@ function animPanel(root: HTMLElement): void {
 }
 
 // ---------------- オブジェクト一覧 ----------------
+/** 選択中のオブジェクトの不透明度（半透明） */
+function opacityRow(): HTMLElement | null {
+  const o = activeObject();
+  if (!o) return null;
+  const val = Math.round((o.opacity ?? 1) * 100);
+  const range = h('input', { type: 'range', min: 5, max: 100, step: 5, value: String(val), class: 'range' });
+  const label = h('span', { class: 'lbl' }, `${val}%`);
+  let started = false;
+  range.addEventListener('input', () => {
+    if (!started) {
+      checkpoint();
+      started = true;
+    }
+    const v = Number(range.value) / 100;
+    o.opacity = v >= 1 ? undefined : v;
+    label.textContent = `${range.value}%`;
+    notify('doc');
+  });
+  range.addEventListener('change', () => {
+    started = false;
+    notify('ui');
+  });
+  return withHelp(row(h('span', { class: 'lbl' }, `${o.name} の不透明度`), range, label, button('50%', () => (checkpoint(), (o.opacity = 0.5), notify('doc', 'ui')))), 'panel:opacity');
+}
+
 function objectsSection(): HTMLElement {
   const objs = state.doc.objects;
   const s = docStats(state.doc);
+  const op = opacityRow();
   return section(
     `オブジェクト（${s.tris} 三角形）`,
     h(
@@ -469,6 +503,7 @@ function objectsSection(): HTMLElement {
         ),
       ),
     ),
+    op,
     grid(
       button('名前変更', () => {
         const o = activeObject();

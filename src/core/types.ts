@@ -28,6 +28,8 @@ export interface MeshObj {
   tex: number;
   visible: boolean;
   doubleSided: boolean;
+  /** 不透明度 0..1（省略時 1）。1 未満なら半透明で描く（例: 複眼の殻を透かして中の目を見せる） */
+  opacity?: number;
 }
 
 export interface Texture {

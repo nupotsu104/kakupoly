@@ -63,6 +63,7 @@ void main() {
 const FRAG = /* glsl */ `
 uniform sampler2D uTex;
 uniform float uHasTex;
+uniform float uOpacity;
 varying vec3 vCol;
 varying vec3 vUvw;
 void main() {
@@ -72,15 +73,19 @@ void main() {
     if (t.a < 0.5) discard;
     c *= t.rgb;
   }
-  gl_FragColor = vec4(c, 1.0);
+  gl_FragColor = vec4(c, uOpacity);
 }`;
 
-export function makePs1Material(shared: SharedUniforms, tex: THREE.Texture | null, doubleSided: boolean): THREE.ShaderMaterial {
+export function makePs1Material(shared: SharedUniforms, tex: THREE.Texture | null, doubleSided: boolean, opacity = 1): THREE.ShaderMaterial {
+  const translucent = opacity < 1;
   return new THREE.ShaderMaterial({
-    uniforms: { ...shared, uTex: { value: tex }, uHasTex: { value: tex ? 1 : 0 } },
+    uniforms: { ...shared, uTex: { value: tex }, uHasTex: { value: tex ? 1 : 0 }, uOpacity: { value: translucent ? Math.max(0, opacity) : 1 } },
     vertexShader: VERT,
     fragmentShader: FRAG,
     side: doubleSided ? THREE.DoubleSide : THREE.FrontSide,
+    // 半透明: 不透明なものを描いた後に重ね、奥のもの（例: 殻の中の目）が見えるよう深度は書かない
+    transparent: translucent,
+    depthWrite: !translucent,
   });
 }
 

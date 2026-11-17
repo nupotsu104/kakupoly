@@ -243,6 +243,7 @@ export async function sceneToDoc(root: THREE.Object3D, clips: THREE.AnimationCli
         tex: texIndex(material?.map),
         visible: true,
         doubleSided: material?.side === THREE.DoubleSide,
+        ...(material?.transparent && (material.opacity ?? 1) < 1 ? { opacity: material.opacity } : {}),
       };
       const base = material?.color ? [material.color.r, material.color.g, material.color.b] : [1, 1, 1];
       // 使う頂点だけを取り出す

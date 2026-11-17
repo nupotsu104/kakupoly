@@ -230,9 +230,10 @@ export class Controls {
         if (d.moved && this.box) this.boxSelect(this.box, d.additive);
         else {
           // 同じ所を素早く2回タップ → その立体（つながっている部分）を丸ごと選ぶ
-          const now = performance.now();
+          // 間隔は「タップした時刻」で測る（重いモデルで処理が遅れても取りこぼさないように）
+          const now = e.timeStamp;
           const lt = this.lastTap;
-          const dbl = state.mode === 'model' && lt && now - lt.t < 400 && Math.hypot(x - lt.x, y - lt.y) < 20;
+          const dbl = state.mode === 'model' && lt && now - lt.t < 450 && Math.hypot(x - lt.x, y - lt.y) < 20;
           if (dbl) {
             this.lastTap = null;
             this.selectLinked();

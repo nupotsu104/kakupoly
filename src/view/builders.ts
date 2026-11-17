@@ -107,13 +107,14 @@ export function buildGeometry(o: MeshObj, opts: BuildOpts): BuiltGeometry {
   return { geo, triFace };
 }
 
-export function buildTexture(t: Texture): THREE.DataTexture {
+export function buildTexture(t: Texture, smooth = false): THREE.DataTexture {
   const tex = new THREE.DataTexture(t.data as unknown as Uint8Array, t.w, t.h, THREE.RGBAFormat, THREE.UnsignedByteType);
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
+  // PS1風はドットのまま（最近傍）。元の見た目は縮小しても粗くならないよう段階縮小（ミップマップ）を使う
+  tex.magFilter = smooth ? THREE.LinearFilter : THREE.NearestFilter;
+  tex.minFilter = smooth ? THREE.LinearMipmapLinearFilter : THREE.NearestFilter;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
-  tex.generateMipmaps = false;
+  tex.generateMipmaps = smooth;
   tex.colorSpace = THREE.NoColorSpace;
   tex.needsUpdate = true;
   return tex;

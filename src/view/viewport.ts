@@ -162,7 +162,7 @@ export class Viewport {
     this.disposeGroup(this.meshGroup);
     this.boneGroup.clear();
     for (const t of this.textures) t.dispose();
-    this.textures = doc.textures.map(buildTexture);
+    this.textures = doc.textures.map((t) => buildTexture(t, state.view.smoothTex));
     this.meshes = [];
     const hasBones = doc.bones.length > 0;
     let skeleton: THREE.Skeleton | null = null;
@@ -182,7 +182,8 @@ export class Viewport {
         staticBone: hasBones ? doc.bones.length : -1,
         weightColors: weightView,
       });
-      const mat = makePs1Material(this.shared, weightView ? null : (this.textures[o.tex] ?? null), o.doubleSided);
+      const op = weightView ? 1 : (o.opacity ?? 1);
+      const mat = makePs1Material(this.shared, weightView ? null : (this.textures[o.tex] ?? null), o.doubleSided, op);
       let mesh: THREE.Mesh;
       if (skeleton) {
         const sm = new THREE.SkinnedMesh(geo, mat);
@@ -190,6 +191,7 @@ export class Viewport {
         mesh = sm;
       } else mesh = new THREE.Mesh(geo, mat);
       mesh.frustumCulled = false;
+      if (op < 1) mesh.renderOrder = 1;
       this.meshGroup.add(mesh);
       this.meshes.push({ obj: o, index, mesh });
     });

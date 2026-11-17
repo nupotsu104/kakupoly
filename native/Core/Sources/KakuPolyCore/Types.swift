@@ -54,8 +54,10 @@ public struct MeshObj: Codable, Equatable {
     public var tex: Int
     public var visible: Bool
     public var doubleSided: Bool
+    /// 不透明度 0...1（1 未満なら半透明）
+    public var opacity: Float
 
-    public init(id: Int, name: String, verts: [V3] = [], faces: [Face] = [], skin: [[Influence]] = [], tex: Int = -1, visible: Bool = true, doubleSided: Bool = false) {
+    public init(id: Int, name: String, verts: [V3] = [], faces: [Face] = [], skin: [[Influence]] = [], tex: Int = -1, visible: Bool = true, doubleSided: Bool = false, opacity: Float = 1) {
         self.id = id
         self.name = name
         self.verts = verts
@@ -64,9 +66,10 @@ public struct MeshObj: Codable, Equatable {
         self.tex = tex
         self.visible = visible
         self.doubleSided = doubleSided
+        self.opacity = opacity
     }
 
-    enum CodingKeys: String, CodingKey { case id, name, verts, faces, skin, tex, visible, doubleSided }
+    enum CodingKeys: String, CodingKey { case id, name, verts, faces, skin, tex, visible, doubleSided, opacity }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -78,7 +81,21 @@ public struct MeshObj: Codable, Equatable {
         tex = try c.decodeIfPresent(Int.self, forKey: .tex) ?? -1
         visible = try c.decodeIfPresent(Bool.self, forKey: .visible) ?? true
         doubleSided = try c.decodeIfPresent(Bool.self, forKey: .doubleSided) ?? false
+        opacity = try c.decodeIfPresent(Float.self, forKey: .opacity) ?? 1
         while skin.count < verts.count { skin.append([]) }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(verts, forKey: .verts)
+        try c.encode(faces, forKey: .faces)
+        try c.encode(skin, forKey: .skin)
+        try c.encode(tex, forKey: .tex)
+        try c.encode(visible, forKey: .visible)
+        try c.encode(doubleSided, forKey: .doubleSided)
+        if opacity < 1 { try c.encode(opacity, forKey: .opacity) }
     }
 }
 

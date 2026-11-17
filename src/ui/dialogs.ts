@@ -26,37 +26,65 @@ export async function openImageImport(target?: Texture): Promise<void> {
   } catch {
     return toast('画像を読み込めませんでした');
   }
-  const opt = { size: Math.min(128, nearestPow2(Math.max(src.w, src.h))), colors: 16, dither: true, bit15: true, crop: true };
+  const MAX_ORIGINAL = 4096; // 元の大きさのまま使う時の上限（iPad のメモリのため）
+  const objs = state.doc.objects;
+  const opt = {
+    size: Math.min(128, nearestPow2(Math.max(src.w, src.h))), // 0 = 元の大きさ
+    colors: 16,
+    dither: true,
+    bit15: true,
+    crop: true,
+    allParts: objs.length > 1 && objs.every((o) => o.tex < 0),
+  };
   const preview = h('canvas', { class: 'qpreview' });
   const info = h('p', { class: 'hint' });
   let result: Img | null = null;
   const compute = () => {
-    // 縦横比を保ったまま、長辺を指定サイズに（短辺も2のべき乗にそろえる）
-    const s = opt.size / Math.max(src.w, src.h);
-    let w = opt.size,
-      hh = opt.size;
-    if (!opt.crop) {
-      w = Math.max(8, nearestPow2(Math.round(src.w * s)));
-      hh = Math.max(8, nearestPow2(Math.round(src.h * s)));
+    let img: Img;
+    if (opt.size === 0) {
+      // 元の大きさ（大きすぎる時だけ縮める）
+      const k = Math.min(1, MAX_ORIGINAL / Math.max(src.w, src.h));
+      img = k < 1 ? resizeBox(src, Math.round(src.w * k), Math.round(src.h * k)) : { w: src.w, h: src.h, data: new Uint8ClampedArray(src.data) };
+    } else {
+      // 縦横比を保ったまま、長辺を指定サイズに（短辺も2のべき乗にそろえる）
+      const s = opt.size / Math.max(src.w, src.h);
+      let w = opt.size,
+        hh = opt.size;
+      if (!opt.crop) {
+        w = Math.max(8, nearestPow2(Math.round(src.w * s)));
+        hh = Math.max(8, nearestPow2(Math.round(src.h * s)));
+      }
+      img = resizeBox(src, w, hh);
     }
-    let img = resizeBox(src, w, hh);
     if (opt.colors > 0) img = quantize(img, opt.colors, opt.dither).img;
     if (opt.bit15) img = to15bit(img);
     result = img;
     preview.width = img.w;
     preview.height = img.h;
     preview.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(img.data), img.w, img.h), 0, 0);
-    info.textContent = `${img.w}×${img.h}・${usedColors(img, 999).length}色`;
+    const colors = img.w * img.h <= 512 * 512 ? `・${usedColors(img, 999).length}色` : '';
+    info.textContent = `${img.w}×${img.h}${colors}`;
   };
-  const body = h(
-    'div',
-    { class: 'qdialog' },
-    h('div', { class: 'qprev-wrap' }, preview),
-    info,
-    h(
-      'div',
-      { class: 'form' },
-      h('label', {}, '大きさ', select(String(opt.size), [['32', '32'], ['64', '64'], ['128', '128'], ['256', '256（PS1の上限）']], (v) => ((opt.size = Number(v)), compute()))),
+  const form = h('div', { class: 'form' });
+  const drawForm = () => {
+    clear(form);
+    form.append(
+      h(
+        'div',
+        { class: 'seg' },
+        button('PS1風にする', () => (Object.assign(opt, { size: 128, colors: 16, dither: true, bit15: true, crop: true }), drawForm(), compute()), {
+          active: opt.size > 0 && opt.colors > 0,
+        }),
+        button('元のまま', () => (Object.assign(opt, { size: 0, colors: 0, dither: false, bit15: false, crop: false }), drawForm(), compute()), {
+          active: opt.size === 0 && opt.colors === 0 && !opt.bit15,
+        }),
+      ),
+      h(
+        'label',
+        {},
+        '大きさ',
+        select(String(opt.size), [['32', '32'], ['64', '64'], ['128', '128'], ['256', '256（PS1の上限）'], ['512', '512'], ['0', `元の大きさ（${src.w}×${src.h}）`]], (v) => ((opt.size = Number(v)), compute())),
+      ),
       h(
         'label',
         {},
@@ -66,7 +94,16 @@ export async function openImageImport(target?: Texture): Promise<void> {
       checkbox('ディザ（網点）', opt.dither, (v) => ((opt.dither = v), compute())),
       checkbox('15bitカラーに丸める', opt.bit15, (v) => ((opt.bit15 = v), compute()), 'PS1の色は各色5bit（計32768色）'),
       checkbox('正方形にする', opt.crop, (v) => ((opt.crop = v), compute())),
-    ),
+    );
+    if (objs.length > 1) form.append(checkbox(`全部のパーツ（${objs.length}個）に貼る`, opt.allParts, (v) => (opt.allParts = v), '1枚の画像を全パーツで共有するモデル向け'));
+  };
+  drawForm();
+  const body = h(
+    'div',
+    { class: 'qdialog' },
+    h('div', { class: 'qprev-wrap' }, preview),
+    info,
+    form,
     h(
       'div',
       { class: 'actions' },
@@ -85,8 +122,11 @@ export async function openImageImport(target?: Texture): Promise<void> {
           t.w = result.w;
           t.h = result.h;
           t.data = new Uint8ClampedArray(result.data);
-          // 使った色をパレットの先頭に
-          state.doc.palette = [...new Set([...usedColors(result, 32), ...state.doc.palette])].slice(0, 48);
+          const ti = state.doc.textures.indexOf(t);
+          if (opt.allParts) for (const o of state.doc.objects) o.tex = ti;
+          // 使った色をパレットの先頭に（大きな画像は数えるのに時間がかかるので小さく縮めてから）
+          const small = result.w * result.h > 256 * 256 ? resizeNearest(result, 128, 128) : result;
+          state.doc.palette = [...new Set([...usedColors(small, 32), ...state.doc.palette])].slice(0, 48);
           notify('doc', 'tex', 'ui');
           m.close();
         },
@@ -94,7 +134,7 @@ export async function openImageImport(target?: Texture): Promise<void> {
       ),
     ),
   );
-  const m = modal('画像をPS1風テクスチャにする', body);
+  const m = modal('画像をテクスチャにする', body);
   compute();
 }
 

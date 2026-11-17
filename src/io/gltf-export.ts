@@ -111,7 +111,14 @@ export async function exportGLB(doc: Doc, opts: ExportOptions = {}): Promise<Uin
   const nodes: Record<string, unknown>[] = [];
   const sceneRoots: number[] = [];
   const boneNode: number[] = [];
+  // ボーン（と固定用の static）は全部「Armature」の下にまとめる。glTF ではスキンの関節に共通の親が必要なため
+  // （ルートボーンが複数ある時や、ウェイトのない頂点用の static がある時に規格違反になっていた）
+  let armature = -1;
+  const armatureChildren: number[] = [];
   if (hasBones) {
+    nodes.push({ name: 'Armature', children: armatureChildren });
+    armature = nodes.length - 1;
+    sceneRoots.push(armature);
     doc.bones.forEach((b) => {
       nodes.push({ name: b.name, translation: b.pos.map((v) => v * scale), rotation: b.rot, scale: b.scl });
       boneNode.push(nodes.length - 1);
@@ -120,14 +127,14 @@ export async function exportGLB(doc: Doc, opts: ExportOptions = {}): Promise<Uin
       if (b.parent >= 0) {
         const p = nodes[boneNode[b.parent]];
         ((p.children as number[] | undefined) ?? (p.children = [])) && (p.children as number[]).push(boneNode[i]);
-      } else sceneRoots.push(boneNode[i]);
+      } else armatureChildren.push(boneNode[i]);
     });
   }
   let staticNode = -1;
   if (needStatic) {
     nodes.push({ name: 'static' });
     staticNode = nodes.length - 1;
-    sceneRoots.push(staticNode);
+    armatureChildren.push(staticNode);
   }
 
   // ---- スキン ----
@@ -147,7 +154,7 @@ export async function exportGLB(doc: Doc, opts: ExportOptions = {}): Promise<Uin
       joints.push(staticNode);
       ibm.set([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], (joints.length - 1) * 16);
     }
-    skins.push({ joints, inverseBindMatrices: accessor(ibm, 'MAT4', FLOAT), skeleton: sceneRoots[0] });
+    skins.push({ joints, inverseBindMatrices: accessor(ibm, 'MAT4', FLOAT), skeleton: armature });
   }
 
   // ---- メッシュ ----
@@ -167,15 +174,18 @@ export async function exportGLB(doc: Doc, opts: ExportOptions = {}): Promise<Uin
       attributes.WEIGHTS_0 = accessor(built.weights, 'VEC4', FLOAT, ARRAY_BUFFER);
     }
     const indices = accessor(built.index, 'SCALAR', built.index instanceof Uint16Array ? USHORT : UINT, ELEMENT_ARRAY_BUFFER);
-    const key = `${o.tex}/${o.doubleSided}`;
+    const opacity = Math.max(0, Math.min(1, o.opacity ?? 1));
+    const key = `${o.tex}/${o.doubleSided}/${opacity}`;
     let mi = matFor.get(key);
     if (mi === undefined) {
       const ti = texMap.get(o.tex);
+      const base = ti !== undefined ? doc.textures[o.tex].name : 'vertexcolor';
       materials.push({
-        name: ti !== undefined ? doc.textures[o.tex].name : 'vertexcolor',
-        pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 1, ...(ti !== undefined ? { baseColorTexture: { index: ti } } : {}) },
-        alphaMode: ti !== undefined ? 'MASK' : 'OPAQUE',
-        ...(ti !== undefined ? { alphaCutoff: 0.5 } : {}),
+        name: opacity < 1 ? `${base}_${Math.round(opacity * 100)}` : base,
+        pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, opacity], metallicFactor: 0, roughnessFactor: 1, ...(ti !== undefined ? { baseColorTexture: { index: ti } } : {}) },
+        // 半透明は BLEND、テクスチャの透明部分は MASK（切り抜き）
+        alphaMode: opacity < 1 ? 'BLEND' : ti !== undefined ? 'MASK' : 'OPAQUE',
+        ...(opacity >= 1 && ti !== undefined ? { alphaCutoff: 0.5 } : {}),
         doubleSided: o.doubleSided,
       });
       mi = materials.length - 1;

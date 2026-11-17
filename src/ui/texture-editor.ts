@@ -4,7 +4,7 @@ import type { V2 } from '../core/types';
 import { state, subscribe, notify, checkpoint, dropCheckpoint, activeObject, activeTexture } from '../state';
 import { ctx as actx } from '../actions';
 import { beginPaint, drawLine, drawRect, floodFill, getPixel, hexToRGBA, rgbaToHex, stamp, type RGBA } from '../core/paint';
-import { selFaces } from '../core/mesh-ops';
+import { selFaces, selectLinkedUV } from '../core/mesh-ops';
 import { capture } from './dom';
 
 interface Drag {
@@ -33,6 +33,9 @@ export class TextureEditor {
   private hover: [number, number] | null = null;
   private dpr = 1;
   private raf = 0;
+  private imgDirty = true;
+  private imgOf: unknown = null;
+  private lastUvTap = 0;
 
   constructor(el: HTMLElement) {
     this.el = el;
@@ -51,6 +54,7 @@ export class TextureEditor {
     c.addEventListener('contextmenu', (e) => e.preventDefault());
     for (const t of ['gesturestart', 'gesturechange']) c.addEventListener(t, (e) => e.preventDefault());
     subscribe((ch) => {
+      if (ch.has('tex') || ch.has('doc')) this.imgDirty = true;
       if (ch.has('tex') || ch.has('doc') || ch.has('sel') || ch.has('ui') || ch.has('mode')) this.invalidate();
     });
   }
@@ -67,7 +71,9 @@ export class TextureEditor {
     const t = activeTexture();
     if (!t) return;
     const r = this.el.getBoundingClientRect();
-    this.zoom = Math.max(1, Math.floor(Math.min((r.width - 24) / t.w, (r.height - 24) / t.h)));
+    // 小さい画像はドットがそろうよう整数倍、大きい画像（元の大きさの写真など）は画面に収まるよう縮小
+    const z = Math.min((r.width - 24) / t.w, (r.height - 24) / t.h);
+    this.zoom = z >= 1 ? Math.floor(z) : z;
     this.ox = (r.width - t.w * this.zoom) / 2;
     this.oy = (r.height - t.h * this.zoom) / 2;
     this.invalidate();
@@ -115,7 +121,11 @@ export class TextureEditor {
       this.img.width = t.w;
       this.img.height = t.h;
     }
-    this.img.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(t.data), t.w, t.h), 0, 0);
+    if (this.imgDirty || this.imgOf !== t) {
+      this.img.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(t.data), t.w, t.h), 0, 0);
+      this.imgDirty = false;
+      this.imgOf = t;
+    }
     const z = this.zoom;
     // 透明部分の市松模様
     g.save();
@@ -167,19 +177,23 @@ export class TextureEditor {
     if (o && state.showUV && o.tex === state.activeTex) {
       const sel = state.mode === 'texture' || state.sel.mode === 'face' ? selFaces(o, state.sel) : new Set<number>();
       const P = (uv: V2): [number, number] => [this.ox + uv[0] * t.w * z, this.oy + uv[1] * t.h * z];
-      g.lineWidth = 1;
-      g.strokeStyle = 'rgba(255,255,255,0.45)';
-      g.beginPath();
+      const unselected = new Path2D();
       o.faces.forEach((f, fi) => {
         if (sel.has(fi)) return;
         f.uv.forEach((uv, i) => {
           const p = P(uv);
-          if (i === 0) g.moveTo(p[0], p[1]);
-          else g.lineTo(p[0], p[1]);
+          if (i === 0) unselected.moveTo(p[0], p[1]);
+          else unselected.lineTo(p[0], p[1]);
         });
-        g.closePath();
+        unselected.closePath();
       });
-      g.stroke();
+      // 明るい縁の上に暗い線（白い画像でも暗い画像でも見える）
+      g.lineWidth = 2;
+      g.strokeStyle = 'rgba(255,255,255,0.35)';
+      g.stroke(unselected);
+      g.lineWidth = 1;
+      g.strokeStyle = 'rgba(20,20,50,0.55)';
+      g.stroke(unselected);
       g.strokeStyle = '#ffa018';
       g.fillStyle = 'rgba(255,160,24,0.15)';
       g.lineWidth = 1.5;
@@ -242,7 +256,7 @@ export class TextureEditor {
     if (!t) return;
     const tp = this.toTex(x, y);
     if (state.tool.texture === 'uv') {
-      this.beginUV(e.pointerId, tp);
+      this.beginUV(e.pointerId, tp, e.timeStamp);
       return;
     }
     this.drag = { id: e.pointerId, kind: 'paint', last: null, start: [Math.floor(tp[0]), Math.floor(tp[1])], changed: false };
@@ -311,7 +325,7 @@ export class TextureEditor {
   }
 
   private zoomAt(x: number, y: number, f: number): void {
-    const nz = Math.max(0.5, Math.min(64, this.zoom * f));
+    const nz = Math.max(0.05, Math.min(64, this.zoom * f));
     const k = nz / this.zoom;
     this.ox = x - (x - this.ox) * k;
     this.oy = y - (y - this.oy) * k;
@@ -368,11 +382,34 @@ export class TextureEditor {
 
   // ---------------- UV ----------------
 
-  private beginUV(id: number, tp: [number, number]): void {
+  private beginUV(id: number, tp: [number, number], at: number): void {
     const t = activeTexture()!;
     const o = activeObject();
     if (!o) return;
     const uv: V2 = [tp[0] / t.w, tp[1] / t.h];
+    // 素早く2回タップしたら、そこの UV の島を丸ごと選ぶ。
+    // 間隔は「タップした時刻」で測る（重いモデルで処理が遅れても、素早いタップを取りこぼさないように）
+    const now = at;
+    const last = this.lastUvTap;
+    this.lastUvTap = now;
+    if (now - last < 450) {
+      const hit = o.faces.findIndex((f) => pointInPoly(uv, f.uv));
+      if (hit >= 0) {
+        // 「追加」の時は、今の選択に島を足す（左右の目など、離れた島をまとめて選べるように）
+        const adding = actx.held.has('hold-add') || state.selOp === 'add';
+        const keep = adding && state.sel.mode === 'face' ? new Set(state.sel.faces) : new Set<number>();
+        state.sel.mode = 'face';
+        state.sel.verts.clear();
+        state.sel.edges.clear();
+        state.sel.faces.clear();
+        state.sel.faces.add(hit);
+        selectLinkedUV(o, state.sel);
+        for (const fi of keep) state.sel.faces.add(fi);
+        this.lastUvTap = 0;
+        notify('sel', 'ui');
+        return;
+      }
+    }
     const sel = selFaces(o, state.sel);
     // 1) 選択面の頂点の近くなら、その頂点（同じ位置を共有するコーナー全部）を動かす
     const tol = 10 / (this.zoom * t.w);

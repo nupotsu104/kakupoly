@@ -1009,6 +1009,47 @@ export function invertSelection(o: MeshObj, sel: Selection): void {
 }
 
 /** つながっている部分をすべて選択 */
+/**
+ * UV の島で選ぶ: 選んでいる面から、「辺を共有し、その辺の両端で UV も同じ」面をたどって選ぶ。
+ * 3D ではつながっていても UV 上で別の島になっている部分（例: 胴体とつながった目の殻）だけを選べる。
+ */
+export function selectLinkedUV(o: MeshObj, sel: Selection): void {
+  const seed = selFaces(o, sel);
+  if (seed.size === 0) return;
+  const same = (a: V2, b: V2) => Math.abs(a[0] - b[0]) < 1e-5 && Math.abs(a[1] - b[1]) < 1e-5;
+  const byEdge = new Map<string, number[]>();
+  o.faces.forEach((f, fi) => {
+    for (let i = 0; i < f.v.length; i++) {
+      const k = edgeKey(f.v[i], f.v[(i + 1) % f.v.length]);
+      const l = byEdge.get(k);
+      if (l) l.push(fi);
+      else byEdge.set(k, [fi]);
+    }
+  });
+  const uvOf = (f: Face, v: number) => f.uv[f.v.indexOf(v)];
+  const seen = new Set(seed);
+  const stack = [...seed];
+  while (stack.length) {
+    const fi = stack.pop()!;
+    const f = o.faces[fi];
+    for (let i = 0; i < f.v.length; i++) {
+      const a = f.v[i],
+        b = f.v[(i + 1) % f.v.length];
+      for (const g of byEdge.get(edgeKey(a, b)) ?? []) {
+        if (seen.has(g)) continue;
+        const h = o.faces[g];
+        if (same(uvOf(f, a), uvOf(h, a)) && same(uvOf(f, b), uvOf(h, b))) {
+          seen.add(g);
+          stack.push(g);
+        }
+      }
+    }
+  }
+  clearSel(sel);
+  sel.mode = 'face';
+  for (const fi of seen) sel.faces.add(fi);
+}
+
 export function selectLinked(o: MeshObj, sel: Selection): void {
   const seed = selVerts(o, sel);
   if (seed.size === 0) return;

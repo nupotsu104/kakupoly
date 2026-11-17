@@ -258,6 +258,13 @@ def('sel-invert', '選択', '選択を反転', () => {
   if (o) ops.invertSelection(o, state.sel);
   notify('sel', 'ui');
 });
+def('sel-linked-uv', '選択', 'UVの島を選択（UV上でつながっている面）', () => {
+  const o = activeObject();
+  if (!o) return;
+  if (ops.selFaces(o, state.sel).size === 0) return toast('先に面を1つ選んでください');
+  ops.selectLinkedUV(o, state.sel);
+  notify('sel', 'ui');
+});
 def('sel-linked', '選択', 'つながっている部分を選択', () => {
   const o = activeObject();
   if (o) ops.selectLinked(o, state.sel);

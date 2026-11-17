@@ -22,6 +22,8 @@ export interface ViewSettings {
   xray: boolean;
   weights: boolean;
   bg: string;
+  /** テクスチャをなめらかに表示（元の見た目用）。オフならドット（最近傍） */
+  smoothTex: boolean;
 }
 
 export const state = {
@@ -64,6 +66,7 @@ export const state = {
     xray: false,
     weights: false,
     bg: '#3a3f58',
+    smoothTex: false,
   } as ViewSettings,
 };
 

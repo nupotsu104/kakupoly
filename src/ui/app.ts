@@ -113,7 +113,7 @@ export function buildApp(root: HTMLElement): void {
       notify('view', 'ui');
     };
     const preset = (ps1: boolean) => () => {
-      Object.assign(v, ps1 ? { res: 240, jitter: true, affine: true, dither: true, shade: 'flat' } : { res: 0, jitter: false, affine: false, dither: false, shade: 'smooth' });
+      Object.assign(v, ps1 ? { res: 240, jitter: true, affine: true, dither: true, shade: 'flat', smoothTex: false } : { res: 0, jitter: false, affine: false, dither: false, shade: 'smooth', smoothTex: true });
       notify('view', 'ui');
     };
     const isPs1 = v.res > 0 && v.jitter && v.affine && v.dither;
@@ -130,6 +130,7 @@ export function buildApp(root: HTMLElement): void {
       checkbox('頂点のガタつき', v.jitter, set('jitter'), '頂点を画面のピクセルに吸着（PS1は頂点座標が整数）'),
       checkbox('テクスチャのゆがみ', v.affine, set('affine'), '遠近補正なしのテクスチャ貼り'),
       checkbox('15bitカラー＋ディザ', v.dither, set('dither')),
+      checkbox('テクスチャをなめらかに', v.smoothTex, set('smoothTex'), 'オフならドットのまま（PS1風）'),
       h('label', {}, '陰影 ', select(v.shade, [['flat', 'カクカク'], ['smooth', 'なめらか'], ['none', 'なし（色そのまま）']], set('shade'))),
       h('hr'),
       h('b', {}, '編集表示'),

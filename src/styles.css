@@ -793,3 +793,9 @@ textarea {
   -webkit-user-select: text;
   user-select: text;
 }
+
+.range {
+  flex: 1;
+  min-width: 80px;
+  accent-color: var(--acc);
+}
