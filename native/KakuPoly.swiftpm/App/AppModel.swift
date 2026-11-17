@@ -31,13 +31,33 @@ final class AppModel: ObservableObject {
     var camera = OrbitCamera()
     var frame: Float = 0
 
+    /// 起動の段階ごとの結果（どこで止まるかを画面で確かめるため）
+    @Published var stages: [String] = ["1. アプリ起動: OK"]
+
     init() {
-        if let data = Data(base64Encoded: sampleKpolyBase64), let d = try? Doc.load(data) {
-            doc = d
-        } else {
-            doc = Doc(name: "空")
+        // 起動直後は何もしない（重い処理で最初の画面が出ないことがないように）
+        doc = Doc(name: "（未読み込み）")
+    }
+
+    /// 段階2: 埋め込みのサンプル作品を読む
+    func loadSampleStage() {
+        guard let data = Data(base64Encoded: sampleKpolyBase64) else {
+            stages.append("2. サンプル読み込み: 失敗（base64 を戻せない）")
+            return
         }
-        camera.frame(Geometry.bounds(doc))
+        do {
+            let d = try Doc.load(data)
+            setDoc(d)
+            stages.append("2. サンプル読み込み: OK（頂点 \(d.objects.reduce(0) { $0 + $1.verts.count })・ボーン \(d.bones.count)）")
+        } catch {
+            stages.append("2. サンプル読み込み: 失敗 \(error)")
+        }
+    }
+
+    /// 段階3: 3D表示を始める（診断の更新もここから）
+    func startDiag() {
+        stages.append("3. 3D表示を開始")
+        diagTimer?.invalidate()
         diagTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.refreshDiag() }
     }
 

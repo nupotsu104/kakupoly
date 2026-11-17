@@ -4,8 +4,39 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @ObservedObject var model: AppModel
     @State private var importing = false
+    @State private var started = false
 
     var body: some View {
+        if started { editor } else { startScreen }
+    }
+
+    /// 最初の画面: 文字とボタンだけ。ここが出なければアプリ自体が起動していない
+    private var startScreen: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("KakuPoly ネイティブ版（試作）").font(.largeTitle.bold())
+            Text("この画面が見えていれば、アプリの起動はできています。下のボタンを順に押してください。")
+            ForEach(Array(model.stages.enumerated()), id: \.offset) { _, s in
+                Text(s).font(.system(.body, design: .monospaced))
+            }
+            HStack(spacing: 12) {
+                Button("① サンプルを読み込む") { model.loadSampleStage() }
+                    .buttonStyle(.borderedProminent)
+                Button("② 3D表示を始める") {
+                    if model.doc.objects.isEmpty { model.loadSampleStage() }
+                    model.startDiag()
+                    started = true
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            Spacer()
+        }
+        .padding(32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color(red: 0.2, green: 0.22, blue: 0.3))
+        .foregroundStyle(.white)
+    }
+
+    private var editor: some View {
         VStack(spacing: 0) {
             topBar
             ZStack(alignment: .bottomLeading) {
